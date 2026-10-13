@@ -33,6 +33,8 @@ python startup50_regression.py
 
 ## 結果摘要（測試集 10 筆，`random_state=0`）
 
+![總覽圖：Step 1 散佈圖、RMSE / R² 折線圖、結果表格與說明](startup50_results.png)
+
 | Number of Features | Selected Features | RMSE | R-squared |
 |---|---|---|---|
 | 1 | R&D Spend | 8274.868018 | 0.946459 |
