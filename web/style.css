@@ -93,6 +93,7 @@ th { font-size: .76rem; font-weight: 600; color: var(--ink-3); background: var(-
 th:first-child, td:first-child { padding-left: .75rem; }
 th:first-child, td:first-child, .txt { text-align: left; }
 td.num { font-family: var(--mono); font-size: .82rem; }
+td.muted { white-space: normal; max-width: 24rem; padding-right: 1rem; }
 .st { font-size: .74rem; font-weight: 600; border-radius: 999px; padding: .15rem .6rem; }
 .st.hi { background: var(--warn-soft); color: var(--warn); }
 .st.ok { background: var(--good-soft); color: var(--good); }

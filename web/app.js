@@ -16,6 +16,16 @@ const DS = {
   },
 };
 
+const DESC = {
+  "R&D Spend": "research and development spend, US$", Administration: "administration spend, US$", "Marketing Spend": "marketing spend, US$",
+  State_Florida: "1 if the company is in Florida (reference: California)", "State_New York": "1 if the company is in New York (reference: California)", Profit: "profit, US$",
+  CRIM: "per-capita crime rate by town", ZN: "share of residential land zoned for lots over 25,000 sq ft", INDUS: "share of non-retail business acres per town",
+  CHAS: "1 if the tract bounds the Charles River, else 0", NOX: "nitric oxide concentration, parts per 10 million", RM: "average number of rooms per dwelling",
+  AGE: "share of owner-occupied units built before 1940", DIS: "weighted distance to five Boston employment centres", RAD: "index of accessibility to radial highways",
+  TAX: "property-tax rate per $10,000", PTRATIO: "pupil-teacher ratio by town", B: "1000(Bk − 0.63)², Bk = share of Black residents by town",
+  LSTAT: "share of the population with lower socioeconomic status", MEDV: "median value of owner-occupied homes, US$1,000s",
+};
+const desc = (n) => DESC[n] || "";
 const S = { ds: "startups", base: {}, method: "F-test", model: "OLS", k: null, whatif: {} };
 const cur = () => S.base[S.ds];
 const spec = () => DS[S.ds];
@@ -90,7 +100,7 @@ function renderMetrics(d, a) {
 }
 function renderStrip(d, a) {
   const gain = 1 - a.cv_rmse / d.bench.mean.cv, beatsRand = a.cv_rmse < d.bench.random[a.k - 1].cv[2], ok = gain >= 0.5 && beatsRand;
-  $("features").innerHTML = `<b>Active predictors (${a.k}):</b>${a.features.map((n) => `<span class="fchip">${esc(n)}</span>`).join("")}`;
+  $("features").innerHTML = `<b>Active predictors (${a.k}):</b>${a.features.map((n) => `<span class="fchip" title="${esc(desc(n))}">${esc(n)}</span>`).join("")}`;
   $("verdict").innerHTML = `<span class="verdict ${ok ? "ok" : "fail"}">${ok ? "✓ Meets" : "✗ Misses"} the success criterion: CV RMSE ${pct(gain)} below the mean baseline (target 50%), ${beatsRand ? "beats" : "does not beat"} random ${a.k}-feature subsets</span>`;
 }
 
@@ -117,9 +127,9 @@ function renderModel(d, a) {
   $("equation").innerHTML = `<code>${esc(d.target)} = ${sig(a.intercept)} ${a.features.map((n, i) => `${a.coef[i] < 0 ? "−" : "+"} ${sig(Math.abs(a.coef[i]))} × <span class="var">${esc(n)}</span>`).join(" ")}</code>`;
   const sd = (n) => d.meta.train_sd[feats.indexOf(n)];
   $("coefNote").textContent = `Estimates in original units. Standardised = estimate × training SD, the change in ${d.target} per one SD of the predictor, comparable across rows.`;
-  $("coefs").innerHTML = table(["Predictor", "Estimate", "Standardised", "Training SD"],
-    [[td("Intercept (β₀)", "txt"), td(sig(a.intercept)), td("—"), td("—")],
-      ...a.features.map((n, i) => [td(esc(n), "txt"), td(sig(a.coef[i])), td(sig(a.coef[i] * sd(n))), td(sig(sd(n)))])]);
+  $("coefs").innerHTML = table(["Predictor", "Meaning", "Estimate", "Standardised", "Training SD"],
+    [[td("Intercept (β₀)", "txt"), td(`baseline ${esc(d.target)} (${esc(desc(d.target))})`, "txt muted"), td(sig(a.intercept)), td("—"), td("—")],
+      ...a.features.map((n, i) => [td(esc(n), "txt"), td(esc(desc(n)), "txt muted"), td(sig(a.coef[i])), td(sig(a.coef[i] * sd(n))), td(sig(sd(n)))])]);
   const pts = d.y_test.map((y, i) => ({ row: d.test_index[i], y, p: a.pred[i], r: y - a.pred[i] })).sort((x, z) => Math.abs(z.r) - Math.abs(x.r)).slice(0, 10);
   $("residNote").textContent = `Top 10 of ${d.meta.n_test} test rows by absolute residual. High residual = larger than the test RMSE (${fmt(a.test_rmse)}).`;
   $("resid").innerHTML = table(["#", "Row", `Actual ${esc(d.target)}`, "Predicted", "Residual", "Abs error", "% error", "Status"],
@@ -136,7 +146,7 @@ function renderDeploy(d, a) {
   const form = $("whatif");
   form.innerHTML = nums.map((n) => {
     const v = vals(n), lo = v[0], hi = v[v.length - 1], val = S.whatif[n] ?? v[Math.floor(v.length / 2)];
-    return `<label><div><span>${esc(n)}</span><output>${sig(val)}</output></div><input type="range" name="${esc(n)}" min="${lo}" max="${hi}" step="${(hi - lo) / 200 || 1}" value="${val}"></label>`;
+    return `<label title="${esc(desc(n))}"><div><span>${esc(n)}</span><output>${sig(val)}</output></div><input type="range" name="${esc(n)}" min="${lo}" max="${hi}" step="${(hi - lo) / 200 || 1}" value="${val}"></label>`;
   }).join("") + (hasState ? `<label>State <select name="State">${states.map((s) => `<option ${s === (S.whatif.State || states[0]) ? "selected" : ""}>${s}</option>`).join("")}</select></label>` : "");
   const update = () => {
     const fd = new FormData(form);
