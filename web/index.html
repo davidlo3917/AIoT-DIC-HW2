@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear regression lab</title>
   <meta name="description" content="CRISP-DM comparison of 5 feature-selection methods × 5 linear regression models on 50 Startups and Boston Housing.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b2f36'/%3E%3Cpath d='M6 24L26 9' stroke='%23f2f7f7' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='19' r='2' fill='%23f2f7f7'/%3E%3Ccircle cx='17' cy='17' r='2' fill='%23f2f7f7'/%3E%3Ccircle cx='22' cy='10' r='2' fill='%23f2f7f7'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23083344'/%3E%3Cpath d='M6 24L26 9' stroke='%23f0fdfa' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='19' r='2' fill='%23f0fdfa'/%3E%3Ccircle cx='17' cy='17' r='2' fill='%23f0fdfa'/%3E%3Ccircle cx='22' cy='10' r='2' fill='%23f0fdfa'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700&family=Fira+Code:wght@500&display=swap">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
 <body>
   <header class="top">
     <div class="wrap">
-      <h1><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0b2f36"/><path d="M6 24L26 9" stroke="#f2f7f7" stroke-width="2.5" stroke-linecap="round"/><circle cx="10" cy="19" r="2" fill="#f2f7f7"/><circle cx="17" cy="17" r="2" fill="#f2f7f7"/><circle cx="22" cy="10" r="2" fill="#f2f7f7"/></svg>Linear regression lab <span class="tag">CRISP-DM</span></h1>
+      <h1><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#083344"/><path d="M6 24L26 9" stroke="#f0fdfa" stroke-width="2.5" stroke-linecap="round"/><circle cx="10" cy="19" r="2" fill="#f0fdfa"/><circle cx="17" cy="17" r="2" fill="#f0fdfa"/><circle cx="22" cy="10" r="2" fill="#f0fdfa"/></svg>Linear regression lab <span class="tag">CRISP-DM</span></h1>
       <a class="ghost" href="https://github.com/davidlo3917/AIoT-DIC-L4">Source on GitHub</a>
     </div>
   </header>
@@ -31,18 +31,11 @@
     </section>
 
     <section class="card controls">
-      <header><div><h3>Compare</h3><p class="muted">Pick any feature-selection methods and models. Every card below follows.</p></div><span class="phase"><b>4</b>Modeling</span></header>
-      <div class="row">
-        <fieldset><legend>Dataset</legend><div class="seg" id="ds" role="radiogroup" aria-label="Dataset"></div></fieldset>
-        <fieldset><legend>Feature selection</legend><div class="chips" id="methods"></div></fieldset>
-        <fieldset><legend>Model</legend><div class="chips" id="models"></div></fieldset>
-        <fieldset><legend>Feature count k</legend>
-          <div class="kbox"><div class="seg small" id="kmode" role="radiogroup" aria-label="How k is chosen"></div>
-            <input type="range" id="k" min="1" max="5" value="2" aria-label="Fixed k"><output id="kout"></output></div>
-        </fieldset>
-        <fieldset><legend>Rank by</legend><div class="seg small" id="rank" role="radiogroup" aria-label="Ranking metric"></div></fieldset>
-      </div>
-      <ol class="pipeline"><span class="phase"><b>3</b>Data preparation</span><span id="pipeline" style="display: contents"></span></ol>
+      <div class="ctl"><span class="lbl">Dataset</span><div class="seg" id="ds" role="radiogroup" aria-label="Dataset"></div></div>
+      <div class="ctl"><span class="lbl">1. Feature selection method</span><div class="seg" id="methods" role="radiogroup" aria-label="Feature selection method"></div></div>
+      <div class="ctl"><span class="lbl">2. Regression model</span><div class="seg" id="models" role="radiogroup" aria-label="Regression model"></div></div>
+      <div class="ctl"><span class="lbl">3. Number of features k</span><div class="seg" id="ks" role="radiogroup" aria-label="Number of features"></div></div>
+      <p class="muted prep"><span class="phase"><b>3</b>Data preparation</span><span id="prep"></span></p>
     </section>
 
     <section>
@@ -53,47 +46,32 @@
     <section class="card strip"><div id="features"></div><div id="verdict"></div></section>
 
     <div class="grid2">
-      <section class="card">
-        <header><div><h3>RMSE by number of features</h3><p class="muted" id="linesNote"></p></div><div class="seg small" id="lineModel" role="radiogroup" aria-label="Model shown"></div></header>
-        <div class="chart" id="lines"></div>
-      </section>
-      <section class="card">
-        <header><div><h3>Method × model</h3><p class="muted" id="heatNote"></p></div><span class="phase"><b>5</b>Evaluation</span></header>
-        <div class="chart" id="heat"></div>
-      </section>
+      <section class="card"><header><div><h3>RMSE by number of features</h3><p class="muted" id="rmseNote"></p></div><span class="phase"><b>5</b>Evaluation</span></header><div class="chart" id="rmse"></div></section>
+      <section class="card"><header><div><h3>R² by number of features</h3><p class="muted" id="r2Note"></p></div><span class="phase"><b>5</b>Evaluation</span></header><div class="chart" id="r2"></div></section>
     </div>
 
-    <section class="card">
-      <header><div><h3>Leaderboard</h3><p class="muted" id="boardNote"></p></div><button type="button" class="showall" id="showAll" hidden></button></header>
-      <div class="table-wrap"><table class="board" id="board"></table></div>
-    </section>
-
     <section class="card equation">
-      <header><div><h3>Fitted equation</h3><p class="muted" id="eqNote"></p></div><span class="phase"><b>4</b>Modeling</span></header>
+      <header><div><h3>Fitted regression equation</h3><p class="muted" id="eqNote"></p></div><span class="phase"><b>4</b>Modeling</span></header>
       <div id="equation"></div>
     </section>
 
     <div class="grid2 wide">
-      <section class="card">
-        <header><div><h3>Standardised coefficients</h3><p class="muted" id="coefNote"></p></div><span class="phase"><b>4</b>Modeling</span></header>
-        <div class="multiples" id="coefs"></div>
-      </section>
-      <section class="card">
-        <header><div><h3>Predict</h3><p class="muted" id="deployNote"></p></div><span class="phase"><b>6</b>Deployment</span></header>
-        <form class="whatif" id="whatif"></form>
-        <div class="prediction" id="prediction" aria-live="polite"></div>
-      </section>
+      <section class="card"><header><div><h3>Model coefficients</h3><p class="muted" id="coefNote"></p></div><span class="phase"><b>4</b>Modeling</span></header><div class="table-wrap" id="coefs"></div></section>
+      <section class="card"><header><div><h3>Live predictor</h3><p class="muted" id="deployNote"></p></div><span class="phase"><b>6</b>Deployment</span></header><form class="whatif" id="whatif"></form><div class="prediction" id="prediction" aria-live="polite"></div></section>
     </div>
 
-    <div class="grid2">
-      <section class="card"><header><div><h3>Actual vs predicted</h3><p class="muted">Test rows. Dashed line = perfect prediction.</p></div><span class="phase"><b>5</b>Evaluation</span></header><div class="chart" id="avp"></div></section>
-      <section class="card"><header><div><h3>Residuals</h3><p class="muted">Actual minus predicted, against the prediction.</p></div></header><div class="chart" id="resid"></div></section>
-    </div>
+    <section class="card"><header><div><h3>Test set residuals</h3><p class="muted" id="residNote"></p></div><span class="phase"><b>5</b>Evaluation</span></header><div class="table-wrap" id="resid"></div></section>
   </main>
 
   <footer class="wrap">
-    <span>NCHU AIIS Lab 4, David Lo. Results are precomputed by <a href="regress.py">regress.py</a> on every push.</span>
-    <span>Data: 50 Startups (Machine Learning A-Z), Boston Housing (Harrison &amp; Rubinfeld 1978, via selva86/datasets).</span>
+    <div>
+      <h4>NCHU AIIS Lab 4, CRISP-DM regression comparison</h4>
+      <p>David Lo. Every push runs <a href="regress.py">regress.py</a> with scikit-learn in GitHub Actions, asserts the teacher's numbers, and publishes the results this page reads. Plain HTML, CSS and JavaScript with Observable Plot.</p>
+    </div>
+    <div class="refs">
+      <h4>Data and references</h4>
+      <p>50 Startups: SuperDataScience "Machine Learning A-Z". Boston Housing: Harrison &amp; Rubinfeld (1978), CSV via <a href="https://github.com/selva86/datasets">selva86/datasets</a>. Layout after <a href="https://huanchen1107.github.io/AIoT-DIC2-MultipleLR/">AIoT-DIC2-MultipleLR</a>.</p>
+    </div>
   </footer>
 </body>
 </html>
