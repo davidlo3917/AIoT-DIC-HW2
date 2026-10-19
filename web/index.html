@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>多元線性迴歸實驗筆記</title>
+  <meta name="description" content="照 CRISP-DM 比較 5 種特徵選擇與 5 種線性迴歸：50 Startups 與 Boston Housing。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2320325c'/%3E%3Cpath d='M6 24L26 9' stroke='%23f6f5f0' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='19' r='2' fill='%23f6f5f0'/%3E%3Ccircle cx='17' cy='17' r='2' fill='%23f6f5f0'/%3E%3Ccircle cx='22' cy='10' r='2' fill='%23f6f5f0'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <details class="rail" id="rail" open>
+    <summary>篩選與設定</summary>
+    <div class="rail-body">
+      <div class="seg" id="ds" role="radiogroup" aria-label="資料集"></div>
+      <fieldset><legend>特徵選擇</legend><div class="chips" id="methods"></div></fieldset>
+      <fieldset><legend>迴歸模型</legend><div class="chips" id="models"></div></fieldset>
+      <fieldset><legend>特徵數 k</legend>
+        <div class="kbox"><div class="seg small" id="kmode" role="radiogroup" aria-label="k 的選法"></div>
+          <input type="range" id="k" min="1" max="5" value="2" aria-label="固定 k"><output id="kout"></output></div>
+      </fieldset>
+      <fieldset><legend>排名依據</legend><div class="seg small" id="rank" role="radiogroup" aria-label="排名依據"></div></fieldset>
+      <button class="live-btn" id="liveToggle" aria-expanded="false" aria-controls="drawer">即時重跑</button>
+    </div>
+  </details>
+
+  <aside class="drawer" id="drawer" hidden>
+    <h2>即時重跑</h2>
+    <p class="muted">在你的瀏覽器裡用 Pyodide 執行同一份 <a href="regress.py">regress.py</a>（scikit-learn 1.8）。第一次需要下載約 31 MB，之後會快取。只會重跑目前選取的方法與模型；超參數改用下面的滑桿，不再用 CV 自動調整。</p>
+    <form id="liveForm">
+      <label>亂數種子 <input type="number" name="seed" min="0" max="9999" value="0"></label>
+      <label>CV 折數 <input type="number" name="folds" min="3" max="10" value="5"></label>
+      <label class="check"><input type="checkbox" name="drop_first" checked> One-hot 刪除第一類（避免虛擬變數陷阱）</label>
+      <label class="check"><input type="checkbox" name="standardize" checked> 標準化特徵（Huber 一律標準化）</label>
+      <label class="check boston-only"><input type="checkbox" name="drop_b"> 刪除 B 欄</label>
+      <label class="check boston-only"><input type="checkbox" name="drop_capped"> 刪除房價 = 50 的 16 筆</label>
+      <div id="hyper"></div>
+      <div class="drawer-actions">
+        <button type="submit" class="primary" id="runBtn">重新執行</button>
+        <button type="button" id="resetBtn" hidden>回到預設結果</button>
+      </div>
+      <progress id="prog" max="1" value="0" hidden></progress>
+      <p id="liveMsg" class="muted" role="status"></p>
+    </form>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <div class="hero-text">
+        <p class="kicker" id="heroKicker"></p>
+        <h1 id="heroTitle"></h1>
+        <p class="lede" id="heroLede"></p>
+      </div>
+      <figure class="hero-fig" id="heroFig" aria-label="最強特徵與目標的散佈圖與迴歸線"></figure>
+    </header>
+
+    <p class="banner" id="banner" hidden></p>
+    <p class="status" id="status" role="status">載入資料中…</p>
+
+    <section id="ch1" class="chapter">
+      <h2><span class="num">第一章</span>商業理解</h2>
+      <div class="prose" id="biz"></div>
+    </section>
+
+    <section id="ch2" class="chapter">
+      <h2><span class="num">第二章</span>資料理解</h2>
+      <p class="prose" id="eduLede"></p>
+      <div class="stats" id="quality"></div>
+      <div class="grid2">
+        <figure><figcaption>目標變數分布</figcaption><div class="chart" id="hist"></div></figure>
+        <figure><figcaption>相關係數（藍 = 正相關，紅 = 負相關）</figcaption><div class="chart" id="corr"></div></figure>
+      </div>
+      <figure><figcaption>每個數值特徵 vs 目標，r = 皮爾森相關係數</figcaption><div class="multiples" id="scatters"></div></figure>
+      <details class="more"><summary>敘述統計表</summary><div class="table-wrap" id="describe"></div></details>
+    </section>
+
+    <section id="ch3" class="chapter">
+      <h2><span class="num">第三章</span>資料準備</h2>
+      <div class="prose" id="prep"></div>
+      <div class="grid2">
+        <figure><figcaption id="onehotCap">One-hot encoding：之前 → 之後</figcaption><div class="table-wrap" id="onehot"></div></figure>
+        <figure><figcaption id="splitCap">80 / 20 切分</figcaption><div class="units" id="split"></div></figure>
+      </div>
+    </section>
+
+    <section id="ch4" class="chapter">
+      <h2><span class="num">第四章</span>建模</h2>
+      <h3>特徵探索：每種方法怎麼排序特徵</h3>
+      <p class="prose" id="featLede"></p>
+      <figure><div class="chart" id="rankMatrix"></div></figure>
+      <h3>模型探索：同一組特徵，不同模型的係數</h3>
+      <p class="prose" id="coefLede"></p>
+      <div class="multiples wide" id="coefs"></div>
+      <div class="equation" id="equation"></div>
+      <h3>正則化路徑：α 變大，係數怎麼縮</h3>
+      <p class="prose">全部特徵、訓練集、標準化後的係數。直線標示目前使用的 α；Lasso 會把係數壓到剛好 0，Ridge 只會縮小。</p>
+      <div class="multiples three" id="paths"></div>
+    </section>
+
+    <section id="ch5" class="chapter">
+      <h2><span class="num">第五章</span>評估</h2>
+      <p class="prose" id="evalLede"></p>
+      <div class="callouts" id="callouts"></div>
+      <div class="table-wrap"><table class="board" id="board"></table></div>
+      <button type="button" class="showall" id="showAll" hidden></button>
+      <div class="grid2">
+        <figure><figcaption id="heatCap"></figcaption><div class="chart" id="heat"></div></figure>
+        <figure><figcaption id="focusCap"></figcaption><div class="chart" id="avp"></div><div class="chart" id="resid"></div></figure>
+      </div>
+      <figure><figcaption id="linesCap"></figcaption><div class="multiples" id="lines"></div></figure>
+      <div id="teacher"></div>
+    </section>
+
+    <section id="ch6" class="chapter">
+      <h2><span class="num">第六章</span>部署</h2>
+      <p class="prose" id="deployLede"></p>
+      <div class="whatif">
+        <form id="whatif"></form>
+        <div class="prediction" id="prediction" aria-live="polite"></div>
+      </div>
+      <div class="prose" id="howbuilt"></div>
+    </section>
+  </main>
+  <footer>NCHU AIIS Lab 4 · 羅志緯 · <a href="https://github.com/davidlo3917/AIoT-DIC-L4">原始碼</a></footer>
+</body>
+</html>
