@@ -9,7 +9,9 @@
   F-test + OLS、k = 2 的數字和該頁一致（測試 RMSE 8,198.80、R² 0.9474）
 - 上週的單檔練習（backward elimination、重現老師的表格）移到 [`lab/`](lab/)
 
-![儀表板：開場、控制列、指標卡、RMSE 與 R² 對 k、迴歸式、係數表、即時預測、殘差表](docs/dashboard.jpg)
+![50 Startups：開場、控制列、指標卡、RMSE 與 R² 對 k、迴歸式、係數表、即時預測、殘差表](docs/dashboard.jpg)
+
+![Boston Housing：同一個儀表板，13 個特徵，預設顯示 F-test + OLS](docs/dashboard-boston.jpg)
 
 ## 比較了什麼
 
