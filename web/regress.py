@@ -1,8 +1,6 @@
 """CRISP-DM 多元線性迴歸比較：5 種特徵選擇 × 5 種線性模型 × 每個 k。
 
-同一份程式在兩個地方執行：
-  - CI / 本機：`python web/regress.py` → 產生 web/data/{startups,boston}.json 並檢查老師的數字
-  - 瀏覽器：worker.js 用 Pyodide 載入本檔，呼叫 run_json() 做即時重跑
+CI / 本機：`python web/regress.py` → 產生 web/data/{startups,boston}.json 並檢查老師的數字
 """
 import io
 import itertools
@@ -191,11 +189,6 @@ def run(csv_text, dataset, cfg=None, methods=METHODS, models=MODELS, progress=No
         orders={m: orders[m] for m in METHODS},
         combos=combos, bench=benchmarks(Xtr, ytr, Xte, yte, folds, cfg["seed"], Xn, y), paths=paths(A, ytr, next((c["hyper"]["l1_ratio"] for c in combos if c["method"] == "All" and c["model"] == "ElasticNet"), cfg["l1_ratio"])))
 
-
-def run_json(csv_text, dataset, cfg_json, methods_json, models_json, progress=None):
-    """給 Pyodide 用：參數與回傳都是 JSON 字串。"""
-    return json.dumps(run(csv_text, dataset, json.loads(cfg_json), json.loads(methods_json), json.loads(models_json),
-                          progress), separators=(",", ":"), allow_nan=False)
 
 
 if __name__ == "__main__":

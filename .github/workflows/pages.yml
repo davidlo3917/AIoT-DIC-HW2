@@ -1,4 +1,4 @@
-# 每次推送到 main：跑 regress.py（含老師數字的檢查）→ 產生 JSON → 部署 web/ 到 GitHub Pages
+# Every push to main: run regress.py (asserts the teacher's numbers) -> write JSON -> deploy web/ to GitHub Pages
 name: Pages
 
 on:
@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.0   # 這個 action 沒有 v10 這種主版本標籤
-      # 版本與瀏覽器裡的 Pyodide 314.0.7 相同，兩邊算出的數字才會一致
+      - uses: astral-sh/setup-uv@v10.3.0   # no v10 major tag exists for this action
+      # pins match the versions the site was verified against
       - run: uv run --python 3.14 --with scikit-learn==1.8.0 --with pandas==3.0.2 --with numpy==2.4.6 --with scipy==1.18.0 python web/regress.py
       - uses: actions/upload-pages-artifact@v5
         with:
