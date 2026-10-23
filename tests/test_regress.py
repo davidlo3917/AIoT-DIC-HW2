@@ -26,8 +26,8 @@ def frame(n=80, **extra):
     return pd.DataFrame({"a": a, "b": b, **cols, "y": 3 * a - 2 * b + rng.normal(size=n)})
 
 
-def go(data, plan=None, **kw):
-    res = run(data if isinstance(data, (bytes, str)) else data.to_csv(index=False), plan, **kw)
+def go(data, plan=None):
+    res = run(data if isinstance(data, (bytes, str)) else data.to_csv(index=False), plan)
     json.dumps(res, allow_nan=False)                                # NaN / inf 不能流進 JSON
     assert all(np.isfinite(c["cv_rmse"]) and np.isfinite(c["test_rmse"]) for c in res["combos"])
     return res
@@ -65,7 +65,7 @@ def test_backward_is_pvalue_elimination():
     """rank() 的 |t| 捷徑（標準化、無截距）= 原始尺度含截距的 OLS，每步刪 p 值最大者。"""
     df, _ = regress.read((HERE / "50_startups.csv").read_bytes())
     plan, _ = regress.check_plan(None, regress.profile(df))
-    X, y = regress.prepare(df, plan, ".", 0)[1:3]
+    X, y = regress.prepare(df, plan, ".")[1:3]
     X = X.to_numpy(float)
     keep, dropped = list(range(X.shape[1])), []
     while len(keep) > 1:
@@ -76,7 +76,7 @@ def test_backward_is_pvalue_elimination():
         j = keep[int(np.argmax(2 * st.t.sf(np.abs(b / se), dof)[1:]))]
         keep.remove(j)
         dropped.append(j)
-    assert regress.rank(StandardScaler().fit_transform(X), y, 0)["Backward"] == keep + dropped[::-1]
+    assert regress.rank(StandardScaler().fit_transform(X), y)["Backward"] == keep + dropped[::-1]
 
 
 def test_ridge_loo_equals_ridgecv():
@@ -169,7 +169,7 @@ def test_leakage_and_exact_combinations():
 
 def test_single_feature():
     res = go(frame(n=60)[["a", "y"]])
-    assert res["meta"]["p"] == 1 and res["orders"]["RFE"] == [0]
+    assert res["meta"]["p"] == 1 and {c["k"] for c in res["combos"]} == {1}
 
 
 def test_sum_leak_like_bike_sharing():
@@ -216,10 +216,10 @@ def test_sampling():
 def test_one_failing_model_does_not_stop_the_grid():
     real = regress.make_model
 
-    def broken(name, cfg):
+    def broken(name, **kw):
         if name == "Huber":
             raise RuntimeError("boom")
-        return real(name, cfg)
+        return real(name, **kw)
     regress.make_model = broken
     try:
         res = go(frame())

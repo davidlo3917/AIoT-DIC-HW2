@@ -10,7 +10,6 @@ import io
 import itertools
 import json
 import math
-import platform
 import re
 import sys
 import warnings
@@ -19,11 +18,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
-import sklearn
 from scipy.linalg import qr
 from sklearn.feature_selection import RFE, f_regression, mutual_info_regression
-from sklearn.linear_model import (ElasticNet, ElasticNetCV, HuberRegressor, Lasso, LassoCV, LinearRegression, Ridge,
-                                  RidgeCV, enet_path, lars_path, lasso_path)
+from sklearn.linear_model import ElasticNet, ElasticNetCV, HuberRegressor, Lasso, LassoCV, LinearRegression, lars_path
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error as rmse
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -32,8 +29,7 @@ METHODS = ["F-test", "MI", "RFE", "Backward", "Lasso", "All"]
 MODELS = ["OLS", "Ridge", "Lasso", "ElasticNet", "Huber"]
 ACTIONS = ["numeric", "category", "date", "extract-number", "drop"]
 LIMITS = dict(max_mb=50, min_rows=30, max_rows=2000, max_features=40, max_levels=10, max_missing=0.5)   # max_rows：p=37 時瀏覽器裡約 19 秒（Chrome 實測）
-DEFAULT = dict(seed=0, test_size=0.2, folds=5, drop_first=True, standardize=True,
-               tuning="cv", alpha_ridge=1.0, alpha_lasso=1.0, alpha_enet=1.0, l1_ratio=0.5, epsilon=1.35)
+CONFIG = dict(seed=0, test_size=0.2, folds=5)                       # 80/20 切分、5 折 CV；網頁的說明文字會讀
 HYPER = {"OLS": [], "Ridge": ["alpha"], "Lasso": ["alpha"], "ElasticNet": ["alpha", "l1_ratio"], "Huber": ["epsilon"]}
 TARGETS = ["price", "target", "y", "label", "count", "cnt", "sales", "profit", "revenue", "rent", "charges", "salary",
            "medv", "popularity", "selling_price", "score"]       # 依序比對欄名（不分大小寫），都沒有就用最後一個數值欄
@@ -205,7 +201,7 @@ def labels(s, dec):
     return lab, key
 
 
-def prepare(df, plan, dec, seed):
+def prepare(df, plan, dec):
     """→ (保留的原始列, X 特徵表（可有 NaN）, y, 紀錄, 每個特徵的來源, one-hot 群組)"""
     log, t = [], plan["target"]
     y = to_number(df[t], dec)
@@ -218,8 +214,8 @@ def prepare(df, plan, dec, seed):
         raise DataError(f"{t} has only {y.nunique()} distinct values, so this is a classification problem. "
                         "This lab fits linear regression, which needs a numeric target.")
     if len(df) > LIMITS["max_rows"]:
-        log.append(f"Using a random {LIMITS['max_rows']:,} of {len(df):,} rows (seed {seed}) to keep the run fast.")
-        keep = df.sample(LIMITS["max_rows"], random_state=seed).index.sort_values()
+        log.append(f"Using a random {LIMITS['max_rows']:,} of {len(df):,} rows (seed {CONFIG['seed']}) to keep the run fast.")
+        keep = df.sample(LIMITS["max_rows"], random_state=CONFIG["seed"]).index.sort_values()
         df, y = df.loc[keep], y.loc[keep]
 
     cols, feats, cats = {}, {}, {}
@@ -322,21 +318,17 @@ def words(feats, groups, target, desc):
 
 
 # ── 特徵排序與模型網格 ───────────────────────────────────────────────────────
-def make_model(name, cfg):
-    cv = cfg["tuning"] == "cv"
-    if name == "OLS":
-        return LinearRegression()
-    if name == "Ridge":
-        return RidgeCV(alphas=np.logspace(-3, 3, 25)) if cv or cfg["alpha_ridge"] is None else Ridge(cfg["alpha_ridge"])   # RidgeCV 用 LOO 閉式解，每個 k 調也很便宜
+def make_model(name, alpha=None, l1_ratio=None):
+    """Lasso / ElasticNet：沒給 α 就用 CV 調，之後用調好的 α 固定。Huber 的 ε 固定 1.35（sklearn 預設）。"""
     if name == "Lasso":
-        return LassoCV(eps=1e-6, cv=5, max_iter=20000) if cv else Lasso(cfg["alpha_lasso"], max_iter=20000, precompute=True)   # Gram：每輪 O(k²) 而不是 O(nk)
+        return Lasso(alpha, max_iter=20000, precompute=True) if alpha else LassoCV(eps=1e-6, cv=5, max_iter=20000)   # Gram：每輪 O(k²) 而不是 O(nk)
     if name == "ElasticNet":
-        return (ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99], eps=1e-6, cv=5, max_iter=20000) if cv   # 預設 eps=1e-3 的 α 網格太粗，美元尺度下會過度收縮
-                else ElasticNet(cfg["alpha_enet"], l1_ratio=cfg["l1_ratio"], max_iter=20000, precompute=True))
-    return HuberRegressor(epsilon=cfg["epsilon"], max_iter=1000)
+        return (ElasticNet(alpha, l1_ratio=l1_ratio, max_iter=20000, precompute=True) if alpha
+                else ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99], eps=1e-6, cv=5, max_iter=20000))   # 預設 eps=1e-3 的 α 網格太粗，美元尺度下會過度收縮
+    return HuberRegressor(epsilon=1.35, max_iter=1000)
 
 
-def rank(Z, y, seed):
+def rank(Z, y):
     """每種方法給一個完整的特徵排序（top-k 會巢狀）。Z 一律已標準化、y 已置中。"""
     if Z.shape[1] == 1:                                             # RFE 至少要 2 個特徵
         return {m: [0] for m in METHODS}
@@ -345,7 +337,7 @@ def rank(Z, y, seed):
     coefs = lars_path(Z, y, method="lasso")[2]                      # 每列 = 一個特徵在路徑上的係數
     entry = [np.flatnonzero(c)[0] if c.any() else np.inf for c in coefs]
     r = {"F-test": order(np.nan_to_num(f_regression(Z, y)[0])),
-         "MI": order(mutual_info_regression(Z, y, random_state=seed)),
+         "MI": order(mutual_info_regression(Z, y, random_state=CONFIG["seed"])),
          "RFE": order(-RFE(LinearRegression(), n_features_to_select=1).fit(Z, y).ranking_),
          "Lasso": order(-np.array(entry, float)),                    # 越早進入路徑越重要
          "All": list(range(Z.shape[1]))}
@@ -360,10 +352,6 @@ def rank(Z, y, seed):
         dropped.append(j)
     r["Backward"] = keep + dropped[::-1]
     return r
-
-
-def scaled(name, cfg):
-    return cfg["standardize"] or name == "Huber"   # ponytail: Huber 在原始尺度上 lbfgs 不收斂（Boston 實測），一律標準化
 
 
 def ols_solver(A, y):
@@ -402,51 +390,47 @@ def warm(est, prev, s_prev, s):
     return est
 
 
-def fit_grid(Xtr, ytr, Xev, cfg, methods, models, tick):
+def fit_grid(Xtr, ytr, Xev, tick):
+    """每種方法 × 每個 k × 每個模型，在標準化的訓練列上配適 → {(方法, k, 模型): (模型, 特徵 index, 預測, 係數)}。"""
     Xtr, Xev = impute(Xtr, Xev)
     sc = StandardScaler().fit(Xtr)
     Ztr, Zev = sc.transform(Xtr), sc.transform(Xev)
-    orders = rank(Ztr, ytr, cfg["seed"])
+    orders = rank(Ztr, ytr)
     # ponytail: α 每個 fold 只用全部特徵調一次、所有 k 共用（快 10–15 倍）；小 k 會略為過度收縮，p=30 實測 CV RMSE 中位數 +0.5%、最多 +0.9%。
     # 要更準就改成每個 k 各自用 LassoCV/ElasticNetCV（舊版做法），代價是 Pyodide 裡要等 1–2 分鐘
-    if cfg["tuning"] == "cv":
-        Atr = Ztr if cfg["standardize"] else Xtr
-        la = make_model("Lasso", cfg).fit(Atr, ytr) if "Lasso" in models else None
-        en = make_model("ElasticNet", cfg).fit(Atr, ytr) if "ElasticNet" in models else None
-        cfg = {**cfg, "tuning": "fixed", "alpha_ridge": None, **({"alpha_lasso": la.alpha_} if la else {}),
-               **({"alpha_enet": en.alpha_, "l1_ratio": en.l1_ratio_} if en else {})}
-    ols = ols_solver(Ztr if scaled("OLS", cfg) else Xtr, ytr)
+    la, en = make_model("Lasso").fit(Ztr, ytr), make_model("ElasticNet").fit(Ztr, ytr)
+    tuned = {"Lasso": dict(alpha=la.alpha_), "ElasticNet": dict(alpha=en.alpha_, l1_ratio=en.l1_ratio_), "Huber": {}}
+    ols = ols_solver(Ztr, ytr)
     out, fits = {}, {}
-    for m in methods:
+    for m in METHODS:
         o = orders[m]
         for k in ([len(o)] if m == "All" else range(1, len(o) + 1)):
             f = o[:k]
             s = sorted(f)                                           # 不同方法常挑到同一組特徵 → 同一組只配一次
-            for name in models:
+            for name in MODELS:
                 if (tuple(s), name) not in fits:
-                    Atr, Aev = (Ztr, Zev) if scaled(name, cfg) else (Xtr, Xev)
                     try:
                         if name == "OLS":
                             est = ols(s)
-                        elif name == "Ridge" and cfg["alpha_ridge"] is None and scaled(name, cfg):
+                        elif name == "Ridge":
                             est = ridge_loo(Ztr[:, s], ytr)
                         else:
-                            est = make_model(name, cfg)
+                            est = make_model(name, **tuned[name])
                             if name == "Huber" and k > 1:
                                 prev = tuple(sorted(o[:k - 1]))
                                 est = warm(est, fits.get((prev, name), (None,))[0], prev, s)
-                            est.fit(Atr[:, s], ytr)
-                        fits[tuple(s), name] = est, est.predict(Aev[:, s])
+                            est.fit(Ztr[:, s], ytr)
+                        fits[tuple(s), name] = est, est.predict(Zev[:, s])
                     except Exception as e:                          # 單一模型失敗不拖垮整個網格：改用平均值並標記
                         fits[tuple(s), name] = (SimpleNamespace(coef_=np.zeros(k), intercept_=ytr.mean(), failed=str(e)[:200]),
-                                                np.full(len(Aev), ytr.mean()))
+                                                np.full(len(Zev), ytr.mean()))
                 est, pred = fits[tuple(s), name]
                 out[m, k, name] = est, f, pred, est.coef_[[s.index(i) for i in f]]   # 係數排回 f（排名）的順序
                 tick()
-    return orders, sc, out
+    return sc, out
 
 
-# ── 基準與係數路徑 ───────────────────────────────────────────────────────────
+# ── 基準 ───────────────────────────────────────────────────────────
 def subsets(p, k, rng, n=20):
     if math.comb(p, k) <= n:
         return [list(s) for s in itertools.combinations(range(p), k)]
@@ -456,9 +440,9 @@ def subsets(p, k, rng, n=20):
     return [list(s) for s in seen]
 
 
-def benchmarks(Xtr, ytr, Xte, yte, folds, seed, X_all, y_all):
-    """預測平均值、隨機特徵子集（OLS）、全資料樣本內 R²。"""
-    rng, p = np.random.default_rng(seed), Xtr.shape[1]
+def benchmarks(Xtr, ytr, Xte, yte, folds):
+    """預測平均值、隨機特徵子集（OLS）。"""
+    rng, p = np.random.default_rng(CONFIG["seed"]), Xtr.shape[1]
     q = lambda a: [float(np.mean(a)), *map(float, np.percentile(a, [10, 50, 90]))]
     err = lambda y, pred: float(np.sqrt(np.mean((y - pred) ** 2)))
     sc = StandardScaler().fit(Xtr)                                  # OLS 的預測不受欄位縮放影響；標準化只是讓 Gram 矩陣好解
@@ -472,33 +456,18 @@ def benchmarks(Xtr, ytr, Xte, yte, folds, seed, X_all, y_all):
         rand.append(dict(k=k, n=len(S), cv=q(cv), test=q(te)))
     return {"mean": {"cv": float(np.mean([rmse(ytr[b], np.full(len(b), ytr[a].mean())) for a, b in folds])),
                      "test": float(rmse(yte, np.full(len(yte), ytr.mean())))},
-            "random": rand,
-            "insample_r2": float(LinearRegression().fit(X_all, y_all).score(X_all, y_all))}
-
-
-def paths(A, y, l1):
-    """全特徵、訓練集上的 Ridge / Lasso / ElasticNet 係數路徑（ElasticNet 用調好的 l1_ratio）。"""
-    y = y - y.mean()
-    ridge_a = np.logspace(-3, 4, 40)
-    ridge = np.array([Ridge(a).fit(A, y).coef_ for a in ridge_a]).T
-    la, lc, _ = lasso_path(A, y, eps=1e-5, n_alphas=40)
-    ea, ec, _ = enet_path(A, y, l1_ratio=l1, eps=1e-5, n_alphas=40)
-    pack = lambda a, c: {"alphas": a.tolist(), "coefs": c.tolist()}
-    return {"Ridge": pack(ridge_a, ridge), "Lasso": pack(la, lc), "ElasticNet": {**pack(ea, ec), "l1_ratio": l1}}
+            "random": rand}
 
 
 # ── 主流程 ───────────────────────────────────────────────────────────────────
-def run(data, plan=None, cfg=None, methods=METHODS, models=MODELS, progress=None, spec=None):
-    cfg = {**DEFAULT, **(cfg or {})}
-    methods = [m for m in METHODS if m in methods]
-    models = [m for m in MODELS if m in models]
+def run(data, plan=None, progress=None, spec=None):
     df, info = read(data)
     prof = profile(df, info["decimal"])
     plan, log = check_plan(plan, prof)
     target = plan["target"]
-    raw, X, y, more, feats, groups = prepare(df, plan, info["decimal"], cfg["seed"])
+    raw, X, y, more, feats, groups = prepare(df, plan, info["decimal"])
     log += more
-    tr, te = train_test_split(np.arange(len(y)), test_size=cfg["test_size"], random_state=cfg["seed"])
+    tr, te = train_test_split(np.arange(len(y)), test_size=CONFIG["test_size"], random_state=CONFIG["seed"])
     bad = screen(X.to_numpy(float)[tr], y[tr], list(X.columns), target)
     log += [f"{X.columns[j]}: dropped ({why})." for j, why in sorted(bad.items())]
     X = X.drop(columns=X.columns[sorted(bad)])
@@ -512,8 +481,8 @@ def run(data, plan=None, cfg=None, methods=METHODS, models=MODELS, progress=None
     log += [f"{c}: {int(k)} missing values filled with the median of the training rows."
             for c, k in zip(cols, np.isnan(Xn).sum(0)) if k]
     Xtr, ytr, Xte, yte = Xn[tr], y[tr], Xn[te], y[te]
-    folds = list(KFold(cfg["folds"], shuffle=True, random_state=cfg["seed"]).split(Xtr))
-    total = sum(1 if m == "All" else p for m in methods) * len(models) * (len(folds) + 1)
+    folds = list(KFold(CONFIG["folds"], shuffle=True, random_state=CONFIG["seed"]).split(Xtr))
+    total = sum(1 if m == "All" else p for m in METHODS) * len(MODELS) * (len(folds) + 1)
     done = [0]
 
     def tick():
@@ -523,16 +492,15 @@ def run(data, plan=None, cfg=None, methods=METHODS, models=MODELS, progress=None
 
     cv = {}
     for a, b in folds:                                              # 補值、標準化、特徵選擇都在每個 fold 內重做 → 不洩漏
-        for key, (_, _, pred, _) in fit_grid(Xtr[a], ytr[a], Xtr[b], cfg, methods, models, tick)[2].items():
+        for key, (_, _, pred, _) in fit_grid(Xtr[a], ytr[a], Xtr[b], tick)[1].items():
             cv.setdefault(key, []).append(rmse(ytr[b], pred))
-    orders, sc, out = fit_grid(Xtr, ytr, Xte, cfg, methods, models, tick)
+    sc, out = fit_grid(Xtr, ytr, Xte, tick)
     Xtr, Xte, Xn = impute(Xtr, Xte, Xn)
 
     combos = []
     for (m, k, name), (est, f, _, c) in out.items():
-        s = scaled(name, cfg)
-        coef = c / sc.scale_[f] if s else c                         # 換回原始單位
-        b0 = float(est.intercept_ - (coef * sc.mean_[f]).sum()) if s else float(est.intercept_)
+        coef = c / sc.scale_[f]                                     # 換回原始單位
+        b0 = float(est.intercept_ - (coef * sc.mean_[f]).sum())
         pred_te, pred_tr = Xte[:, f] @ coef + b0, Xtr[:, f] @ coef + b0
         r2_tr, nz = r2_score(ytr, pred_tr), int(np.count_nonzero(np.abs(coef) > 1e-12))
         worst = np.argsort(-np.abs(yte - pred_te), kind="stable")[:10]
@@ -540,7 +508,7 @@ def run(data, plan=None, cfg=None, methods=METHODS, models=MODELS, progress=None
             method=m, k=k, model=name, features=[cols[i] for i in f],
             cv_rmse=float(np.mean(cv[m, k, name])), cv_std=float(np.std(cv[m, k, name])),
             test_rmse=float(rmse(yte, pred_te)), test_mae=float(mean_absolute_error(yte, pred_te)),
-            test_r2=float(r2_score(yte, pred_te)), train_r2=float(r2_tr),
+            test_r2=float(r2_score(yte, pred_te)),
             adj_r2=float(1 - (1 - r2_tr) * (n - 1) / (n - nz - 1)) if n - nz - 1 > 0 else None,
             hyper={h: float(getattr(est, h + "_", getattr(est, h, 0))) for h in HYPER[name]},
             coef=coef.tolist(), intercept=b0,
@@ -550,23 +518,17 @@ def run(data, plan=None, cfg=None, methods=METHODS, models=MODELS, progress=None
     spec = {"name": "Uploaded data", "title": f"What drives {target}?", "lede": "", "unit": "",
             "digits": 0 if np.median(np.abs(y)) >= 100 else 2, "descriptions": {}, **(spec or {})}
     numeric = [c for c in cols if "level" not in feats[c]]
-    stats = pd.DataFrame(Xn[:, [cols.index(c) for c in numeric]], columns=numeric).assign(**{target: y})
-    A = sc.transform(Xtr) if cfg["standardize"] else Xtr
     return dict(
-        target=target, spec=spec, config=cfg, methods=methods, models=models,
+        target=target, spec=spec, config=CONFIG,
         prep=dict(file=info, profile=prof, plan=plan, log=log),
         meta=dict(rows=len(y), p=p, n_train=n, n_test=len(yte), features=cols,
                   text_columns=[c for c in groups if any(feats[f]["column"] == c for f in cols)],
                   groups={c: g for c, g in groups.items() if any(feats[f]["column"] == c for f in cols)},
                   desc=words({f: feats[f] for f in cols}, groups, target, spec["descriptions"]),
                   ranges={c: [float(v) for v in np.percentile(Xn[:, cols.index(c)], [0, 50, 100])] for c in numeric},
-                  train_mean=sc.mean_.tolist(), train_sd=sc.scale_.tolist(),
-                  missing=int(df.isna().sum().sum()), duplicates=int(df.duplicated().sum()),
-                  versions=dict(python=platform.python_version(), sklearn=sklearn.__version__, pandas=pd.__version__)),
-        describe=json.loads(stats.describe().round(4).to_json()), corr=json.loads(stats.corr().round(4).fillna(0).to_json()),
-        orders={m: orders[m] for m in METHODS},
-        combos=combos, bench=benchmarks(Xtr, ytr, Xte, yte, folds, cfg["seed"], Xn, y),
-        paths=paths(A, ytr, next((c["hyper"]["l1_ratio"] for c in combos if c["method"] == "All" and c["model"] == "ElasticNet"), cfg["l1_ratio"])))
+                  train_sd=sc.scale_.tolist(),
+                  missing=int(df.isna().sum().sum()), duplicates=int(df.duplicated().sum())),
+        combos=combos, bench=benchmarks(Xtr, ytr, Xte, yte, folds))
 
 
 # ── 給 worker.js（Pyodide）用：檔案已寫進虛擬檔案系統，結果以 JSON 字串回傳 ──
