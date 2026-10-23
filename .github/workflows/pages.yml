@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0   # no v10 major tag exists for this action
+      - run: node proxy/worker.test.mjs   # the Gemini proxy's guards, against a fake Gemini
       # pins match the packages in Pyodide 314.0.7 (web/worker.js), so CI and the browser compute the same numbers
       - run: uv run --python 3.14 --with scikit-learn==1.8.0 --with pandas==3.0.2 --with numpy==2.4.6 --with scipy==1.18.0 python tests/test_regress.py
       - run: uv run --python 3.14 --with scikit-learn==1.8.0 --with pandas==3.0.2 --with numpy==2.4.6 --with scipy==1.18.0 python web/regress.py

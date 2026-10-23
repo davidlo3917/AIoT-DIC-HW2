@@ -1,0 +1,18 @@
+# Gemini proxy for the HW2 site (proxy/worker.mjs). Wrangler needs Node 22.
+# Local:  npx wrangler@4.149.0 dev        (GEMINI_KEY comes from proxy/.dev.vars, which git ignores)
+# Deploy: npx wrangler@4.149.0 deploy && npx wrangler@4.149.0 secret put GEMINI_KEY
+name = "aiot-dic-hw2-proxy"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://davidlo3917.github.io,http://localhost:8000"
+
+# per visitor IP: 10 AI requests a minute (Cloudflare allows a 10 or 60 second period)
+[[ratelimits]]
+name = "PER_IP"
+namespace_id = "2001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
