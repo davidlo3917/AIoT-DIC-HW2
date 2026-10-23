@@ -5,7 +5,7 @@ const MODELS = ["OLS", "Ridge", "Lasso", "ElasticNet", "Huber"];
 const ML = { "F-test": "F-test", MI: "Mutual info", RFE: "RFE", Backward: "Backward", Lasso: "Lasso path" };
 const ACTIONS = ["numeric", "category", "date", "extract-number", "drop"];   // regress.ACTIONS
 // the Gemini proxy (proxy/worker.mjs); the production URL is known after `wrangler deploy`
-const PROXY = ["localhost", "127.0.0.1"].includes(location.hostname) ? "http://127.0.0.1:8787" : "https://aiot-dic-hw2-proxy.REPLACE-AFTER-DEPLOY.workers.dev";
+const PROXY = ["localhost", "127.0.0.1"].includes(location.hostname) ? "http://127.0.0.1:8787" : "https://aiot-dic-hw2-proxy.davidlo3917.workers.dev";
 const S = { ds: null, base: {}, method: "F-test", model: "OLS", k: null, whatif: {} };
 const cur = () => S.base[S.ds];
 const spec = () => cur().spec;
