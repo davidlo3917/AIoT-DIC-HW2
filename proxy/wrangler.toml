@@ -4,6 +4,7 @@
 name = "aiot-dic-hw2-proxy"
 main = "worker.mjs"
 compatibility_date = "2026-10-01"
+preview_urls = false        # no versioned preview hosts: one public URL, one origin check
 
 [vars]
 ALLOWED_ORIGINS = "https://davidlo3917.github.io,http://localhost:8000"

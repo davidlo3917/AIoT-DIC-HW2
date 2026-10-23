@@ -1,7 +1,7 @@
 // Gemini proxy for the HW2 site. POST /plan takes a column profile, POST /summary the numbers the pipeline computed;
 // both are data and never instructions. This Worker writes the prompts itself, asks Gemini for a fixed JSON schema, and
 // returns only fields it has validated.
-// Guards: origin allowlist, per-IP rate limit, size caps, fixed prompt, enum-constrained output, sanitised text.
+// Guards: origin allowlist, per-IP rate limit, size caps, fixed prompt, enum-constrained output, sanitised text, summary numbers checked against the input.
 export const MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"];   // the second is the fallback when the first is overloaded
 export const LIMITS = { bytes: 64_000, columns: 100, samples: 5, deadline: 45_000, attempt: 20_000 };
 const API = "https://generativelanguage.googleapis.com/v1beta/interactions";
@@ -95,9 +95,18 @@ function summaryInput(b) {
     preparation_log: few(b.preparation_log, 12).map((l) => clean(l, 160)),
   };
 }
-export function summaryOutput(out) {
-  const lines = (v, n) => few(v, 20).map((s) => clean(s, 240)).filter(Boolean).slice(0, n);
-  return { summary: clean(out?.summary, 800), findings: lines(out?.findings, 5), recommendation: clean(out?.recommendation, 300), caveats: lines(out?.caveats, 3) };
+// a sentence survives only when every number in it is a rounding of a number the page sent, or that number as a percentage
+// ponytail: magnitudes only, the sign is a word ("decreasing by 66,497"); a derived number (a difference, a ratio) is dropped with its sentence
+const nums = (s) => String(s).replace(/(\d),(?=\d{3})/g, "$1").match(/(?<![A-Za-z])\d+(?:\.\d+)?%?/g) || [];
+const cited = (sentence, input) => nums(sentence).every((t) => {
+  const q = parseFloat(t), tol = Math.max(0.5 * 10 ** -(t.split(".")[1]?.replace("%", "").length ?? 0), 0.01 * q);
+  return input.some((v) => Math.abs(v - q) <= tol || (t.endsWith("%") && Math.abs(v - q / 100) <= tol / 100));
+});
+export function summaryOutput(out, data) {
+  const input = nums(JSON.stringify(data)).map(parseFloat);
+  const text = (v, n) => clean(v, n).split(/(?<=[.!?])\s+/).filter((s) => cited(s, input)).join(" ");
+  const lines = (v, n) => few(v, 20).map((s) => clean(s, 240)).filter((s) => s && cited(s, input)).slice(0, n);
+  return { summary: text(out?.summary, 800), findings: lines(out?.findings, 5), recommendation: text(out?.recommendation, 300), caveats: lines(out?.caveats, 3) };
 }
 
 const ROUTES = {
@@ -106,7 +115,7 @@ const ROUTES = {
     const numeric = new Set(body.profile.filter((c) => +c?.numeric >= 0.95).map((c) => String(c.name)));
     return { system: PLAN_SYSTEM, data, schema: planSchema(names.length), tokens: 1000 + 120 * names.length, output: (out) => planOutput(out, names, numeric) };
   },
-  "/summary"(body) { return { system: SUMMARY_SYSTEM, data: summaryInput(body), schema: SUMMARY_SCHEMA, tokens: 1200, output: summaryOutput }; },
+  "/summary"(body) { const data = summaryInput(body); return { system: SUMMARY_SYSTEM, data, schema: SUMMARY_SCHEMA, tokens: 1200, output: (out) => summaryOutput(out, data) }; },
 };
 
 // ── answer checks for /plan: only known ids, known actions, short plain text ──
