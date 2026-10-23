@@ -505,7 +505,6 @@ def run(data, plan=None, progress=None, spec=None):
         b0 = float(est.intercept_ - (coef * sc.mean_[f]).sum())
         pred_te, pred_tr = Xte[:, f] @ coef + b0, Xtr[:, f] @ coef + b0
         r2_tr, nz = r2_score(ytr, pred_tr), int(np.count_nonzero(np.abs(coef) > 1e-12))
-        worst = np.argsort(-np.abs(yte - pred_te), kind="stable")[:10]
         combos.append(dict(
             method=m, k=k, model=name, features=[cols[i] for i in f],
             cv_rmse=float(np.mean(cv[m, k, name])), cv_std=float(np.std(cv[m, k, name])),
@@ -514,7 +513,6 @@ def run(data, plan=None, progress=None, spec=None):
             adj_r2=float(1 - (1 - r2_tr) * (n - 1) / (n - nz - 1)) if n - nz - 1 > 0 else None,
             hyper={h: float(getattr(est, h + "_", getattr(est, h, 0))) for h in HYPER[name]},
             coef=coef.tolist(), intercept=b0,
-            top=[[int(raw.index[te[i]]), float(yte[i]), float(f"{pred_te[i]:.6g}")] for i in worst],   # 殘差最大的 10 筆測試列
             **({"failed": est.failed} if hasattr(est, "failed") else {})))
 
     spec = {"name": "Uploaded data", "title": f"What drives {target}?", "lede": "", "unit": "",
@@ -530,7 +528,8 @@ def run(data, plan=None, progress=None, spec=None):
                   ranges={c: [float(v) for v in np.percentile(Xn[:, cols.index(c)], [0, 50, 100])] for c in numeric},
                   train_sd=sc.scale_.tolist(),
                   missing=int(df.isna().sum().sum()), duplicates=int(df.duplicated().sum())),
-        combos=combos, bench=benchmarks(Xtr, ytr, Xte, yte, folds))
+        combos=combos, bench=benchmarks(Xtr, ytr, Xte, yte, folds),
+        x_test=[[float(f"{v:.6g}") for v in r] for r in Xte], y_test=[float(v) for v in yte])   # 測試列：頁面用每個組合的係數算預測值，畫實際值對預測值
     res["summary_input"] = summary_input(res)
     return res
 

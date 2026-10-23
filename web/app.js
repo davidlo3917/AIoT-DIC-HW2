@@ -129,11 +129,15 @@ function renderModel(d, a) {
   $("coefs").innerHTML = table(["Predictor", "Meaning", "Estimate", "Standardised", "Training SD"],
     [[td("Intercept (β₀)", "txt"), td(`baseline ${esc(d.target)} (${esc(desc(d.target))})`, "txt muted"), td(sig(a.intercept)), td("—"), td("—")],
       ...a.features.map((n, i) => [td(esc(n), "txt"), td(esc(desc(n)), "txt muted"), td(sig(a.coef[i])), td(sig(a.coef[i] * sd(n))), td(sig(sd(n)))])]);
-  const pts = a.top.map(([row, y, p]) => ({ row, y, p, r: y - p }));   // regress.py keeps the 10 largest residuals
-  $("residNote").textContent = `Top 10 of ${d.meta.n_test} test rows by absolute residual. High residual = larger than the test RMSE (${fmt(a.test_rmse)}).`;
-  $("resid").innerHTML = table(["#", "Row", `Actual ${esc(d.target)}`, "Predicted", "Residual", "Abs error", "% error", "Status"],
-    pts.map((x, i) => [td(i + 1, "txt"), td(`#${x.row}`, "txt"), td(fmt(x.y)), td(fmt(x.p)), td(`<span class="${x.r >= 0 ? "pos" : "neg"}">${x.r >= 0 ? "+" : "−"}${fmt(Math.abs(x.r))}</span>`), td(fmt(Math.abs(x.r))), td(x.y ? pct(Math.abs(x.r / x.y)) : "—"),
-      td(Math.abs(x.r) > a.test_rmse ? `<span class="st hi">High residual</span>` : `<span class="st ok">In range</span>`, "txt")]));
+  // actual vs predicted on every test row; the predictions come from this combination's equation, like the live predictor
+  const idx = a.features.map((n) => feats.indexOf(n));
+  const pts = d.x_test.map((row, i) => { const p = a.intercept + idx.reduce((s, j, t) => s + row[j] * a.coef[t], 0); return { y: d.y_test[i], p, r: d.y_test[i] - p }; });
+  const miss = pts.filter((x) => Math.abs(x.r) > a.test_rmse), under = miss.filter((x) => x.r > 0).length;
+  $("residNote").textContent = `All ${pts.length} test rows. The dashed line is a perfect prediction; points above it are under-predicted. ${miss.length} rows miss by more than the test RMSE (${fmt(a.test_rmse)}), ${under} of them under-predicted.`;
+  const all = pts.flatMap((x) => [x.y, x.p]), lo = Math.min(...all), hi = Math.max(...all);
+  chart($("resid"), (w) => Plot.plot({ width: w, height: 340, marginLeft: ml(), style: style(), grid: true, x: { label: `Predicted ${d.target}` }, y: { label: `Actual ${d.target}` },
+    marks: [Plot.line([[lo, lo], [hi, hi]], { stroke: C.ink3, strokeDasharray: "3 3" }),
+      Plot.dot(pts, { x: "p", y: "y", r: 3, fill: C.m[a.method] || C.accent, fillOpacity: 0.55, stroke: C.card, strokeWidth: 0.5, tip: true, title: (x) => `actual ${fmt(x.y)}\npredicted ${fmt(x.p)}\nresidual ${x.r >= 0 ? "+" : "−"}${fmt(Math.abs(x.r))}` })] }));
 }
 
 // ── live predictor: the linear equation evaluated in the browser ─────────────
