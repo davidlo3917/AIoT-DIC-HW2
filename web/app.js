@@ -3,6 +3,9 @@ import * as Plot from "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.17/+e
 const METHODS = ["F-test", "MI", "RFE", "Backward", "Lasso"];
 const MODELS = ["OLS", "Ridge", "Lasso", "ElasticNet", "Huber"];
 const ML = { "F-test": "F-test", MI: "Mutual info", RFE: "RFE", Backward: "Backward", Lasso: "Lasso path" };
+const ACTIONS = ["numeric", "category", "date", "extract-number", "drop"];   // regress.ACTIONS
+// the Gemini proxy (proxy/worker.mjs); the production URL is known after `wrangler deploy`
+const PROXY = ["localhost", "127.0.0.1"].includes(location.hostname) ? "http://127.0.0.1:8787" : "https://aiot-dic-hw2-proxy.REPLACE-AFTER-DEPLOY.workers.dev";
 const S = { ds: null, base: {}, method: "F-test", model: "OLS", k: null, whatif: {} };
 const cur = () => S.base[S.ds];
 const spec = () => cur().spec;
@@ -53,8 +56,11 @@ function renderControls(d, a) {
   seg($("models"), MODELS.map((m) => [m, m]), S.model, pick((v) => (S.model = v)));
   const best = minBy(methods().flatMap((m) => series(d, m, S.model)), (c) => c.cv_rmse).k, p = d.meta.p;
   seg($("ks"), Array.from({ length: p }, (_, i) => i + 1).map((k) => [k, `k = ${k}${k === best ? " <small>★ Best by CV</small>" : k === p ? " <small>Full model</small>" : ""}`, k === best ? "best" : k === p ? "full" : ""]), a.k, (v) => { S.k = +v; S.whatif = {}; render(); });
-  const c = d.config, txt = d.meta.text_columns;
+  $("ks").classList.toggle("dense", p > 15);
+  const c = d.config, txt = d.meta.text_columns, f = d.prep.file, log = d.prep.log;
   $("prep").textContent = `${txt.length ? `One-hot ${txt.join(", ")} with the first level dropped (${p} columns). ` : ""}80/20 split with seed ${c.seed}: ${d.meta.n_train} train, ${d.meta.n_test} test rows. StandardScaler fitted on the training rows. Features are ranked inside each of the ${c.folds} CV folds, so CV never sees validation rows.`;
+  $("logSum").textContent = `Preparation log: ${log.length ? `${log.length} step${log.length === 1 ? "" : "s"}` : "nothing to clean"}. Read ${f.rows.toLocaleString("en-US")} rows × ${f.columns} columns as ${f.encoding}, ${sepName(f.sep)}-separated; ${d.meta.missing.toLocaleString("en-US")} missing cells, ${d.meta.duplicates.toLocaleString("en-US")} duplicate rows.`;
+  $("prepLog").innerHTML = log.map((l) => `<li>${esc(l)}</li>`).join("");
 }
 
 // ── hero, metric cards, strip ────────────────────────────────────────────────
@@ -64,7 +70,8 @@ function renderHero(d) {
   $("heroLede").textContent = s.lede;
   $("pills").innerHTML = [[`${d.meta.rows} rows, ${d.meta.p} features, target ${d.target}`], [`${METHODS.length} selection methods × ${MODELS.length} models × k = 1 … ${d.meta.p}`],
     [`★ Best by CV: ${label(best)}, k = ${best.k} (test RMSE ${fmt(best.test_rmse)})`, "best"],
-    [`Full model, k = ${d.meta.p}: test RMSE ${fmt(full.test_rmse)}`, full.test_rmse > best.test_rmse ? "warn" : ""]]
+    [`Full model, k = ${d.meta.p}: test RMSE ${fmt(full.test_rmse)}`, full.test_rmse > best.test_rmse ? "warn" : ""],
+    ...(s.ai ? [["✦ Descriptions on this page were written by AI (Gemini): check them", "ai"]] : [])]
     .map(([t, cls = ""]) => `<span class="pill ${cls}">${esc(t)}</span>`).join("");
 }
 function renderMetrics(d, a) {
@@ -74,7 +81,7 @@ function renderMetrics(d, a) {
     ["Test RMSE", fmt(a.test_rmse), `lower is better; ${pct(1 - a.test_rmse / b.test)} below the mean baseline (${fmt(b.test)})`],
     ["Test R²", a.test_r2.toFixed(4), `explains ${pct(a.test_r2)} of ${d.target} variance on the test rows`],
     ["Adjusted R² (train)", a.adj_r2 == null ? "—" : a.adj_r2.toFixed(4), "penalises every extra coefficient"],
-    ["Test MAE", fmt(a.test_mae), `mean absolute error, in ${spec().unit}`],
+    ["Test MAE", fmt(a.test_mae), `mean absolute error${spec().unit ? `, in ${spec().unit}` : ""}`],
     ["CV RMSE", fmt(a.cv_rmse), `± ${fmt(a.cv_std)} SD over ${d.config.folds} folds; the ranking metric`],
   ].map(([l, v, n]) => `<div class="card metric"><div class="label">${l}</div><b>${v}</b><span>${esc(n)}</span></div>`).join("");
 }
@@ -92,7 +99,7 @@ function renderCharts(d, a) {
   const note = S.method === "*" ? " Lines overlap where methods pick the same features." : "";
   $("rmseNote").innerHTML = `Lower is better. Lowest test RMSE at k = ${lo.k}${S.method === "*" ? ` (${ML[lo.method]})` : ""}.${note} ${legend}`;
   $("r2Note").innerHTML = `Higher is better. Peak test R² at k = ${hi.k}${S.method === "*" ? ` (${ML[hi.method]})` : ""}.${note} ${legend}`;
-  const line = (y, el, fmtY) => chart($(el), (w) => Plot.plot({ width: w, height: 300, marginLeft: ml(), style: style(), grid: true, x: { label: "Number of features k", ticks: d.meta.p, tickFormat: "d" }, y: { label: null },
+  const line = (y, el, fmtY) => chart($(el), (w) => Plot.plot({ width: w, height: 300, marginLeft: ml(), style: style(), grid: true, x: { label: "Number of features k", ticks: Math.min(d.meta.p, 12), tickFormat: "d" }, y: { label: null },
     marks: [Plot.ruleX([a.k], { stroke: C.ink3, strokeDasharray: "3 3" }),
       Plot.line(rows, { x: "k", y, z: "method", stroke: (r) => C.m[r.method], strokeWidth: 2 }),
       Plot.dot(rows, { x: "k", y, fill: (r) => C.m[r.method], r: (r) => (r.k === a.k ? 5 : 3.5), stroke: C.card, tip: true, title: (r) => `${ML[r.method]}, k = ${r.k}\n${fmtY(r[y])}` })] }));
@@ -105,7 +112,7 @@ function renderModel(d, a) {
   const feats = d.meta.features, hyper = Object.entries(a.hyper).map(([h, v]) => `${h} = ${sig(v)}`).join(", ");
   const dum = dummies(d), refs = [...new Set(a.features.filter((n) => dum[n]).map((n) => dum[n][0]))].map((c) => `${c}_ columns are 0/1 against ${c} = ${d.meta.groups[c].reference}`);
   $("eqNote").textContent = `${label(a)}, k = ${a.k}, original units${hyper ? `, ${hyper}` : ""}.${refs.length ? ` ${refs.join("; ")}.` : ""}`;
-  $("equation").innerHTML = `<code>${esc(d.target)} = ${sig(a.intercept)} ${a.features.map((n, i) => `${a.coef[i] < 0 ? "−" : "+"} ${sig(Math.abs(a.coef[i]))} × <span class="var">${esc(n)}</span>`).join(" ")}</code>`;
+  $("equation").innerHTML = `<code>${esc(d.target)} = ${sig(a.intercept)} ${a.features.map((n, i) => `<span class="term">${a.coef[i] < 0 ? "−" : "+"} ${sig(Math.abs(a.coef[i]))} × <span class="var">${esc(n)}</span></span>`).join(" ")}</code>`;
   const sd = (n) => d.meta.train_sd[feats.indexOf(n)];
   $("coefNote").textContent = `Estimates in original units. Standardised = estimate × training SD, the change in ${d.target} per one SD of the predictor, comparable across rows.`;
   $("coefs").innerHTML = table(["Predictor", "Meaning", "Estimate", "Standardised", "Training SD"],
@@ -136,11 +143,128 @@ function renderDeploy(d, a) {
     a.features.forEach((n, i) => { const x = dum[n] ? +(fd.get(dum[n][0]) === dum[n][1]) : +fd.get(n); S.whatif[n] = x; y += a.coef[i] * x; });
     cats.forEach((c) => (S.whatif[c] = fd.get(c)));
     form.querySelectorAll("input[type=range]").forEach((r) => (r.previousElementSibling.lastChild.textContent = sig(+r.value)));
-    $("prediction").innerHTML = `Predicted ${esc(d.target)} (${esc(spec().unit)})<b>${fmt(y)}</b>± ${fmt(a.test_rmse)} test RMSE`;
+    $("prediction").innerHTML = `Predicted ${esc(d.target)}${spec().unit ? ` (${esc(spec().unit)})` : ""}<b>${fmt(y)}</b>± ${fmt(a.test_rmse)} test RMSE`;
   };
   form.oninput = update;
   update();
 }
+
+// ── upload: profile the file in the worker, let the AI review the plan, run, show it as a dataset ──
+const U = { file: null, resp: null, rules: null, ai: null, source: "rules", plan: null, edited: false };
+let worker;
+const jobs = [];   // the worker answers in the order the messages were sent
+function call(msg, transfer = [], onProgress) {
+  if (!worker) {
+    worker = new Worker("worker.js", { type: "module" });
+    worker.onmessage = ({ data: m }) => {
+      if (m.type === "status") $("upStatus").textContent = m.text;
+      else if (m.type === "progress") jobs[0]?.onProgress?.(m);
+      else if (m.type === "error") jobs.shift()?.reject(Object.assign(new Error(m.message), { data: m.data }));
+      else jobs.shift()?.resolve(m);
+    };
+    worker.onerror = (e) => { e.preventDefault(); drop(`The worker failed: ${e.message || "could not load worker.js"}`); };
+  }
+  return new Promise((resolve, reject) => { jobs.push({ resolve, reject, onProgress }); worker.postMessage(msg, transfer); });
+}
+function drop(why) {   // Cancel, or a worker that could not load: a fresh worker reboots Pyodide on the next call
+  worker?.terminate();
+  worker = null;
+  jobs.splice(0).forEach((j) => j.reject(new Error(why)));
+}
+const showErr = (e) => { $("upStatus").textContent = ""; $("upError").textContent = e.message; };
+const sepName = (s) => (s === "\t" ? "tab" : `"${s}"`);
+// every non-target column gets an action; a column that just stopped being the target is numeric by definition
+const norm = (plan) => ({ target: plan.target, columns: Object.fromEntries(U.resp.profile.filter((p) => p.name !== plan.target).map((p) => [p.name, plan.columns[p.name] || { action: "numeric", reason: "numbers" }])) });
+const fromSource = (src) => norm(src === "ai" ? { target: U.ai.plan.target || U.rules.target, columns: { ...U.rules.columns, ...U.ai.plan.columns } } : U.rules);
+
+function openUpload() {
+  $("upload").hidden = false;
+  if (!U.file) call({ type: "boot" }).then(() => { if (!U.file) $("upStatus").textContent = "Python is ready. Choose a CSV."; }).catch(showErr);   // download while the user browses for the file
+}
+async function planFile(file) {
+  if (!file) return;
+  Object.assign(U, { file, resp: null, ai: null, source: "rules", plan: null, edited: false });
+  $("upError").textContent = ""; $("planBox").hidden = true; $("upStatus").textContent = `Reading ${file.name}…`;
+  try {
+    const buf = await file.arrayBuffer();
+    const { json } = await call({ type: "plan", file: buf }, [buf]);
+    if (U.file !== file) return;   // another file was picked meanwhile
+    U.resp = JSON.parse(json); U.rules = U.resp.plan; U.plan = norm(U.rules);
+  } catch (e) { if (U.file === file) showErr(e); return; }
+  $("upStatus").textContent = ""; $("planBox").hidden = false;
+  renderPlan();
+  askAI(file);
+}
+async function askAI(file) {
+  try {
+    const r = await fetch(`${PROXY}/plan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(U.resp), signal: AbortSignal.timeout(50_000) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    if (U.file !== file) return;
+    U.ai = d;
+    if (!U.edited) { U.source = "ai"; U.plan = fromSource("ai"); }   // never overwrite edits the user made while waiting
+  } catch (e) {
+    if (U.file !== file) return;
+    U.ai = { error: e.name === "TimeoutError" ? "timed out" : e.name === "TypeError" ? "proxy not reachable" : e.message };
+  }
+  renderPlan();
+}
+function renderPlan() {
+  const { file, resp, plan, rules, ai } = U, f = resp.file, hasAI = ai && !ai.error;
+  $("fileInfo").textContent = `${file.name}: ${f.rows.toLocaleString("en-US")} rows × ${f.columns} columns, ${f.encoding}, ${sepName(f.sep)}-separated`;
+  $("target").innerHTML = resp.profile.filter((p) => p.numeric >= 0.95 && p.unique > 2).map((p) => p.name).map((c) => `<option ${c === plan.target ? "selected" : ""}>${esc(c)}</option>`).join("");
+  const changed = (c) => (c === plan.target ? plan.target !== rules.target : plan.columns[c].action !== (rules.columns[c]?.action ?? "target"));
+  const n = resp.profile.filter((p) => changed(p.name)).length, cols = `${n} column${n === 1 ? "" : "s"}`;
+  $("source").hidden = !hasAI;
+  if (hasAI) seg($("source"), [["rules", "Rule-based"], ["ai", `✦ AI suggestion (${esc(ai.model)})`]], U.source, (v) => { U.source = v; U.edited = false; U.plan = fromSource(v); renderPlan(); });
+  $("aiNote").textContent = ai?.error ? `AI unavailable (${ai.error}); the rule-based plan is used.`
+    : !ai ? "Asking the AI (Gemini) to review the plan…"
+    : U.source === "ai" ? `The AI ${n ? `changed ${cols} (highlighted)` : "kept every rule-based choice"}${U.edited ? ", then you edited it" : ""}. It is a suggestion: check it before running.`
+    : n ? `Rule-based plan with your edits to ${cols} (highlighted).` : "Rule-based plan.";
+  $("plan").innerHTML = `<table><thead><tr>${["Column", "Type", "Missing", "Distinct", "Sample values", "Action", "Why"].map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${resp.profile.map((p) => {
+    const c = p.name, a = plan.columns[c], w = hasAI && ai.spec.descriptions[c];
+    const act = c === plan.target ? [td(`<span class="st ok">target</span>`, "txt"), td("the column to predict", "txt muted")]
+      : [td(`<select data-c="${esc(c)}" aria-label="action for ${esc(c)}">${ACTIONS.map((x) => `<option ${x === a.action ? "selected" : ""}>${x}</option>`).join("")}</select>${a.action === "category" ? `<label>keep<input type="number" data-c="${esc(c)}" min="2" max="100" placeholder="10" value="${a.levels ?? ""}" title="how many of the most common labels to keep; the rest are grouped as Other">labels</label>` : ""}`, "txt"), td(esc(a.reason), "txt muted")];
+    return `<tr class="${changed(c) ? "changed" : ""}">${[td(`${esc(c)}${w ? `<small>${esc(w)}</small>` : ""}`, "txt"), td(p.type, "txt"), td(pct(p.missing)), td(p.unique.toLocaleString("en-US")), td(p.samples.map(esc).join(", "), "txt samples"), ...act].join("")}</tr>`;
+  }).join("")}</tbody></table>`;
+}
+async function runUpload() {
+  const { file, resp, ai, plan } = U, hasAI = ai && !ai.error;
+  const same = hasAI && ai.plan.target === plan.target;   // the AI's title, lede and unit describe the target it picked
+  const spec = { name: (same && ai.spec.name) || file.name.replace(/\.[^.]+$/, "").slice(0, 40), descriptions: hasAI ? ai.spec.descriptions : {}, ai: !!hasAI,
+    lede: `Uploaded file ${file.name}: ${resp.file.rows.toLocaleString("en-US")} rows and ${resp.file.columns} columns. ${plan.target} is predicted from the other columns, prepared as the column plan says.` };
+  if (same) for (const k of ["title", "lede", "unit"]) if (ai.spec[k]) spec[k] = ai.spec[k];
+  $("upError").textContent = ""; $("run").disabled = true; $("cancel").hidden = false; $("prog").hidden = false; $("prog").removeAttribute("value"); $("runNote").textContent = "Preparing the data…";
+  const t0 = performance.now();
+  try {
+    const buf = await file.arrayBuffer();
+    const { json, secs } = await call({ type: "run", file: buf, plan, spec }, [buf],
+      ({ done, total }) => { $("prog").max = total; $("prog").value = done; $("runNote").textContent = `Fitted ${done.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} models, ${Math.round((performance.now() - t0) / 1000)} s`; });
+    S.base.upload = JSON.parse(json); S.ds = "upload"; S.k = null; S.whatif = {};
+    render();
+    $("runNote").textContent = `Done in ${secs.toFixed(1)} s. The results live in this tab only and replace any earlier upload.`;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) { $("runNote").textContent = ""; showErr(e); }
+  finally { $("run").disabled = false; $("cancel").hidden = true; $("prog").hidden = true; $("upStatus").textContent = ""; }
+}
+$("uploadBtn").onclick = () => { openUpload(); $("file").click(); };
+$("pick").onclick = () => $("file").click();
+$("file").onchange = (e) => { planFile(e.target.files[0]); e.target.value = ""; };
+$("closeUp").onclick = () => { $("upload").hidden = true; };
+$("run").onclick = runUpload;
+$("cancel").onclick = () => drop("Cancelled. The Python runtime is reloaded on the next run.");
+$("target").onchange = (e) => { U.edited = true; U.plan = norm({ ...U.plan, target: e.target.value }); renderPlan(); };
+$("plan").onchange = (e) => {
+  const el = e.target, c = el.dataset.c;
+  if (!c) return;
+  U.edited = true;
+  if (el.tagName === "SELECT") { U.plan.columns[c] = { action: el.value, reason: "set by you" }; renderPlan(); }
+  else if (+el.value >= 2 && +el.value <= 100) U.plan.columns[c].levels = +el.value;
+  else delete U.plan.columns[c].levels;
+};
+$("upload").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("over"); };
+$("upload").ondragleave = () => $("drop").classList.remove("over");
+$("upload").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("over"); planFile(e.dataTransfer.files[0]); };
 
 // ── main ─────────────────────────────────────────────────────────────────────
 function render() {

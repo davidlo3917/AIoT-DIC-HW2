@@ -1,5 +1,5 @@
 // Pyodide in a Web Worker: the same regress.py as CI, so the browser and CI compute the same numbers.
-// In:  {type: "boot"} | {type: "plan", file: ArrayBuffer} | {type: "run", file: ArrayBuffer, plan?: object}
+// In:  {type: "boot"} | {type: "plan", file: ArrayBuffer} | {type: "run", file: ArrayBuffer, plan?: object, spec?: object}
 // Out: {type: "status", text} | {type: "progress", done, total} | {type: "ready"}
 //      {type: "plan" | "run", json, secs} | {type: "error", message, data: true when the file is the problem}
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
@@ -23,7 +23,7 @@ onmessage = async ({ data: m }) => {
     const path = "/tmp/upload.csv", t = performance.now();
     py.FS.writeFile(path, new Uint8Array(m.file));
     const json = m.type === "plan" ? regress.plan_json(path)
-      : regress.run_json(path, m.plan ? JSON.stringify(m.plan) : null, (done, total) => postMessage({ type: "progress", done, total }));
+      : regress.run_json(path, m.plan ? JSON.stringify(m.plan) : null, (done, total) => postMessage({ type: "progress", done, total }), m.spec ? JSON.stringify(m.spec) : null);
     postMessage({ type: m.type, json, secs: (performance.now() - t) / 1000 });
   } catch (e) {
     const last = String(e?.message || e).trim().split("\n").pop();   // a Python traceback ends with "Type: message"

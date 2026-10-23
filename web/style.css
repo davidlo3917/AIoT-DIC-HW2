@@ -55,8 +55,8 @@ main.wrap { display: grid; gap: 22px; padding-top: 24px; padding-bottom: 24px; }
 .ctl { margin-bottom: 1.1rem; }
 .lbl { display: block; font-size: .74rem; font-weight: 600; color: var(--ink-3); margin-bottom: .45rem; }
 .seg { display: flex; flex-wrap: wrap; gap: .45rem; }
-.seg button { font: 500 .88rem var(--sans); border: 1px solid var(--rule); background: var(--card); color: var(--ink-2); border-radius: 999px; padding: .45rem .95rem; cursor: pointer; display: inline-flex; align-items: center; gap: .45rem; transition: background .15s, color .15s; }
-.seg button:hover { border-color: var(--accent); }
+.seg button, .btn { font: 500 .88rem var(--sans); border: 1px solid var(--rule); background: var(--card); color: var(--ink-2); border-radius: 999px; padding: .45rem .95rem; cursor: pointer; display: inline-flex; align-items: center; gap: .45rem; transition: background .15s, color .15s; }
+.seg button:hover, .btn:hover { border-color: var(--accent); }
 .seg button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 10px -3px rgb(14 116 144 / .6); }
 .seg .sw { width: .65rem; height: .65rem; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px var(--card); }
 .seg button.all { border-style: dashed; }
@@ -101,7 +101,8 @@ td.muted { white-space: normal; max-width: 24rem; padding-right: 1rem; }
 
 /* equation, predictor */
 .equation { border-left: 4px solid var(--accent); }
-.equation code { display: block; font: 500 .95rem/1.7 var(--mono); background: var(--card-2); border: 1px solid var(--rule); border-radius: 10px; padding: .8rem 1.1rem; overflow-x: auto; white-space: nowrap; }
+.equation code { display: block; font: 500 .95rem/1.7 var(--mono); background: var(--card-2); border: 1px solid var(--rule); border-radius: 10px; padding: .8rem 1.1rem; }
+.equation .term { white-space: nowrap; }
 .equation .var { color: var(--accent); }
 .whatif { display: grid; gap: .9rem; }
 .whatif label { display: grid; gap: .15rem; font-size: .88rem; font-weight: 500; }
@@ -117,3 +118,31 @@ footer.wrap { display: grid; grid-template-columns: 1.2fr 1fr; gap: 2.5rem; padd
 footer h4 { font-size: .95rem; color: var(--ink); margin-bottom: .4rem; }
 footer p { margin: 0; }
 footer .refs { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 18px; }
+
+/* upload panel */
+[hidden] { display: none !important; }
+.row { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { color: var(--accent-ink); filter: brightness(1.08); }
+.btn:disabled { opacity: .55; cursor: progress; }
+.btn.link { border: 0; padding: 0; background: none; color: var(--accent); text-decoration: underline; font: inherit; }
+.drop { border: 2px dashed var(--rule); border-radius: 12px; padding: 1.3rem; text-align: center; color: var(--ink-2); background: var(--card-2); transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop p { margin: 0; }
+.drop small { color: var(--ink-3); }
+.upload .status { margin-top: .8rem; }
+.plan-head { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: flex-start; margin: 1.1rem 0; }
+.plan-head .muted { margin-top: .4rem; max-width: 40rem; }
+.plan-head select, .plan select, .plan input { font: inherit; font-size: .85rem; padding: .3rem .4rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--card); color: var(--ink); }
+.plan input[type=number] { width: 4.2rem; margin: 0 .3rem 0 .5rem; }
+.plan td { white-space: normal; vertical-align: top; }
+.plan td.samples { font-family: var(--mono); font-size: .78rem; color: var(--ink-3); max-width: 16rem; }
+.plan td small { display: block; color: var(--ink-3); font-weight: 400; max-width: 16rem; }
+.plan tr.changed td { background: var(--warn-soft); }
+.run-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
+.run-row progress { flex: 1 1 12rem; height: .6rem; accent-color: var(--accent); }
+.pill.ai { background: rgb(110 231 183 / .18); border-color: rgb(110 231 183 / .5); }
+details.log { margin-top: .6rem; font-size: .85rem; color: var(--ink-3); }
+details.log summary { cursor: pointer; }
+details.log ol { margin: .4rem 0 0; padding-left: 1.4rem; color: var(--ink-2); }
+.seg.dense button { padding: .3rem .6rem; font-size: .8rem; }

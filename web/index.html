@@ -31,11 +31,28 @@
     </section>
 
     <section class="card controls">
-      <div class="ctl"><span class="lbl">Dataset</span><div class="seg" id="ds" role="radiogroup" aria-label="Dataset"></div></div>
+      <div class="ctl"><span class="lbl">Dataset</span><div class="row"><div class="seg" id="ds" role="radiogroup" aria-label="Dataset"></div><button type="button" class="btn" id="uploadBtn">⬆ Upload a CSV</button><input type="file" id="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden></div></div>
       <div class="ctl"><span class="lbl">1. Feature selection method</span><div class="seg" id="methods" role="radiogroup" aria-label="Feature selection method"></div></div>
       <div class="ctl"><span class="lbl">2. Regression model</span><div class="seg" id="models" role="radiogroup" aria-label="Regression model"></div></div>
       <div class="ctl"><span class="lbl">3. Number of features k</span><div class="seg" id="ks" role="radiogroup" aria-label="Number of features"></div></div>
       <p class="muted prep"><span class="phase"><b>3</b>Data preparation</span><span id="prep"></span></p>
+      <details class="log"><summary id="logSum"></summary><ol id="prepLog"></ol></details>
+    </section>
+
+    <section class="card upload" id="upload" hidden>
+      <header><div><h3>Upload a CSV</h3><p class="muted">Any table with a numeric column to predict. The file stays in your browser: the pipeline runs here in Python (Pyodide). Only a summary of the columns is sent to the AI, which suggests how to treat them; you decide.</p></div><div class="row"><span class="phase"><b>2</b>Data understanding</span><button type="button" class="btn" id="closeUp">Hide</button></div></header>
+      <div class="drop" id="drop"><p>Drop a CSV here or <button type="button" class="btn link" id="pick">choose a file</button>.<br><small>Up to 50 MB; files over 2,000 rows are sampled so a run takes about 20 seconds. Excel files: save as CSV first.</small></p></div>
+      <p class="status" id="upStatus" role="status"></p>
+      <p class="status error" id="upError" role="alert"></p>
+      <div id="planBox" hidden>
+        <div class="plan-head">
+          <div><span class="lbl">File</span><span id="fileInfo"></span></div>
+          <div><label class="lbl" for="target">Target: the column to predict</label><select id="target"></select></div>
+          <div><span class="lbl">Column plan</span><div class="seg" id="source" role="radiogroup" aria-label="Plan source"></div><p class="muted" id="aiNote"></p></div>
+        </div>
+        <div class="table-wrap plan" id="plan"></div>
+        <div class="run-row"><button type="button" class="btn primary" id="run">Run the pipeline</button><button type="button" class="btn" id="cancel" hidden>Cancel</button><progress id="prog" aria-label="Run progress" hidden></progress><span class="muted" id="runNote"></span></div>
+      </div>
     </section>
 
     <section>

@@ -538,9 +538,9 @@ def plan_json(path):
     return json.dumps({"file": info, "profile": prof, "plan": heuristic_plan(prof)}, allow_nan=False)
 
 
-def run_json(path, plan=None, progress=None):
-    return json.dumps(run(Path(path).read_bytes(), json.loads(plan) if plan else None, progress=progress),
-                      separators=(",", ":"), allow_nan=False)
+def run_json(path, plan=None, progress=None, spec=None):
+    return json.dumps(run(Path(path).read_bytes(), json.loads(plan) if plan else None, progress=progress,
+                          spec=json.loads(spec) if spec else None), separators=(",", ":"), allow_nan=False)
 
 
 if __name__ == "__main__":
