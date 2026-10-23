@@ -3,7 +3,6 @@ import * as Plot from "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.17/+e
 const METHODS = ["F-test", "MI", "RFE", "Backward", "Lasso"];
 const MODELS = ["OLS", "Ridge", "Lasso", "ElasticNet", "Huber"];
 const ML = { "F-test": "F-test", MI: "Mutual info", RFE: "RFE", Backward: "Backward", Lasso: "Lasso path" };
-const ACTIONS = ["numeric", "category", "date", "extract-number", "drop"];   // regress.ACTIONS
 // the Gemini proxy (proxy/worker.mjs); the production URL is known after `wrangler deploy`
 const PROXY = ["localhost", "127.0.0.1"].includes(location.hostname) ? "http://127.0.0.1:8787" : "https://aiot-dic-hw2-proxy.davidlo3917.workers.dev";
 const S = { ds: null, base: {}, method: "F-test", model: "OLS", k: null, whatif: {} };
@@ -78,6 +77,7 @@ function renderSummary(d) {
   const s = d.summary;
   $("summary").hidden = !s;
   if (!s) return;
+  $("sumNote").classList.toggle("busy", !!s.pending);
   $("sumNote").textContent = s.pending ? "Asking the AI (Gemini) to summarise the results…" : s.error ? `AI summary unavailable (${s.error}).`
     : `Written by AI (Gemini ${s.model}${s.date ? `, ${s.date}` : ""}) from the numbers on this page, not from the data itself. Check every claim against the cards below.`;
   $("sumBody").innerHTML = s.summary ? `<p>${esc(s.summary)}</p><ul>${s.findings.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p><b>Recommendation.</b> ${esc(s.recommendation)}</p>${s.caveats.length ? `<p class="muted">Caveats: ${s.caveats.map(esc).join(" ")}</p>` : ""}` : "";
@@ -165,7 +165,7 @@ function call(msg, transfer = [], onProgress) {
   if (!worker) {
     worker = new Worker("worker.js", { type: "module" });
     worker.onmessage = ({ data: m }) => {
-      if (m.type === "status") $("upStatus").textContent = m.text;
+      if (m.type === "status") say(m.text, true);
       else if (m.type === "progress") jobs[0]?.onProgress?.(m);
       else if (m.type === "error") jobs.shift()?.reject(Object.assign(new Error(m.message), { data: m.data }));
       else jobs.shift()?.resolve(m);
@@ -179,7 +179,8 @@ function drop(why) {   // Cancel, or a worker that could not load: a fresh worke
   worker = null;
   jobs.splice(0).forEach((j) => j.reject(new Error(why)));
 }
-const showErr = (e) => { $("upStatus").textContent = ""; $("upError").textContent = e.message; };
+const say = (text, busy = false) => { $("upStatus").textContent = text; $("upStatus").classList.toggle("busy", busy); };
+const showErr = (e) => { say(""); $("upError").textContent = e.message; };
 const sepName = (s) => (s === "\t" ? "tab" : `"${s}"`);
 // every non-target column gets an action; a column that just stopped being the target is numeric by definition
 const norm = (plan) => ({ target: plan.target, columns: Object.fromEntries(U.resp.profile.filter((p) => p.name !== plan.target).map((p) => [p.name, plan.columns[p.name] || { action: "numeric", reason: "numbers" }])) });
@@ -187,19 +188,19 @@ const fromSource = (src) => norm(src === "ai" ? { target: U.ai.plan.target || U.
 
 function openUpload() {
   $("upload").hidden = false;
-  if (!U.file) call({ type: "boot" }).then(() => { if (!U.file) $("upStatus").textContent = "Python is ready. Choose a CSV."; }).catch(showErr);   // download while the user browses for the file
+  if (!U.file) call({ type: "boot" }).then(() => { if (!U.file) say("Python is ready. Choose a CSV."); }).catch(showErr);   // download while the user browses for the file
 }
 async function planFile(file) {
   if (!file) return;
   Object.assign(U, { file, resp: null, ai: null, source: "rules", plan: null, edited: false });
-  $("upError").textContent = ""; $("planBox").hidden = true; $("upStatus").textContent = `Reading ${file.name}…`;
+  $("upError").textContent = ""; $("planBox").hidden = true; say(`Reading ${file.name}…`, true);
   try {
     const buf = await file.arrayBuffer();
     const { json } = await call({ type: "plan", file: buf }, [buf]);
     if (U.file !== file) return;   // another file was picked meanwhile
     U.resp = JSON.parse(json); U.rules = U.resp.plan; U.plan = norm(U.rules);
   } catch (e) { if (U.file === file) showErr(e); return; }
-  $("upStatus").textContent = ""; $("planBox").hidden = false;
+  say(""); $("planBox").hidden = false;
   renderPlan();
   askAI(file);
 }
@@ -232,14 +233,15 @@ function renderPlan() {
   const n = resp.profile.filter((p) => changed(p.name)).length, cols = `${n} column${n === 1 ? "" : "s"}`;
   $("source").hidden = !hasAI;
   if (hasAI) seg($("source"), [["rules", "Rule-based"], ["ai", `✦ AI suggestion (${esc(ai.model)})`]], U.source, (v) => { U.source = v; U.edited = false; U.plan = fromSource(v); renderPlan(); });
+  $("aiNote").classList.toggle("busy", !ai);
   $("aiNote").textContent = ai?.error ? `AI unavailable (${ai.error}); the rule-based plan is used.`
     : !ai ? "Asking the AI (Gemini) to review the plan…"
-    : U.source === "ai" ? `The AI ${n ? `changed ${cols} (highlighted)` : "kept every rule-based choice"}${U.edited ? ", then you edited it" : ""}. It is a suggestion: check it before running.`
-    : n ? `Rule-based plan with your edits to ${cols} (highlighted).` : "Rule-based plan.";
+    : U.source === "ai" ? `The AI ${n ? `changed ${cols} (highlighted)` : "kept every rule-based choice"}. Switch to Rule-based if it looks wrong.`
+    : n ? `Rule-based plan; the target differs from the rules' pick (highlighted).` : "Rule-based plan.";
   $("plan").innerHTML = `<table><thead><tr>${["Column", "Type", "Missing", "Distinct", "Sample values", "Action", "Why"].map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${resp.profile.map((p) => {
     const c = p.name, a = plan.columns[c], w = hasAI && ai.spec.descriptions[c];
     const act = c === plan.target ? [td(`<span class="st ok">target</span>`, "txt"), td("the column to predict", "txt muted")]
-      : [td(`<select data-c="${esc(c)}" aria-label="action for ${esc(c)}">${ACTIONS.map((x) => `<option ${x === a.action ? "selected" : ""}>${x}</option>`).join("")}</select>${a.action === "category" ? `<label>keep<input type="number" data-c="${esc(c)}" min="2" max="100" placeholder="10" value="${a.levels ?? ""}" title="how many of the most common labels to keep; the rest are grouped as Other">labels</label>` : ""}`, "txt"), td(esc(a.reason), "txt muted")];
+      : [td(`${a.action}${a.levels ? ` <small>${a.levels} labels</small>` : ""}`, "txt"), td(esc(a.reason), "txt muted")];
     return `<tr class="${changed(c) ? "changed" : ""}">${[td(`${esc(c)}${w ? `<small>${esc(w)}</small>` : ""}`, "txt"), td(p.type, "txt"), td(pct(p.missing)), td(p.unique.toLocaleString("en-US")), td(p.samples.map(esc).join(", "), "txt samples"), ...act].join("")}</tr>`;
   }).join("")}</tbody></table>`;
 }
@@ -261,7 +263,7 @@ async function runUpload() {
     $("runNote").textContent = `Done in ${secs.toFixed(1)} s. The results live in this tab only and replace any earlier upload.`;
     document.querySelector(".hero").scrollIntoView({ behavior: "smooth" });   // the upload panel sits above the results
   } catch (e) { $("runNote").textContent = ""; showErr(e); }
-  finally { $("run").disabled = false; $("cancel").hidden = true; $("prog").hidden = true; $("upStatus").textContent = ""; }
+  finally { $("run").disabled = false; $("cancel").hidden = true; $("prog").hidden = true; say(""); }
 }
 $("uploadBtn").onclick = () => { openUpload(); $("file").click(); };
 $("pick").onclick = () => $("file").click();
@@ -270,14 +272,6 @@ $("closeUp").onclick = () => { $("upload").hidden = true; };
 $("run").onclick = runUpload;
 $("cancel").onclick = () => drop("Cancelled. The Python runtime is reloaded on the next run.");
 $("target").onchange = (e) => { U.edited = true; U.plan = norm({ ...U.plan, target: e.target.value }); renderPlan(); };
-$("plan").onchange = (e) => {
-  const el = e.target, c = el.dataset.c;
-  if (!c) return;
-  U.edited = true;
-  if (el.tagName === "SELECT") { U.plan.columns[c] = { action: el.value, reason: "set by you" }; renderPlan(); }
-  else if (+el.value >= 2 && +el.value <= 100) U.plan.columns[c].levels = +el.value;
-  else delete U.plan.columns[c].levels;
-};
 $("upload").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("over"); };
 $("upload").ondragleave = () => $("drop").classList.remove("over");
 $("upload").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("over"); planFile(e.dataTransfer.files[0]); };

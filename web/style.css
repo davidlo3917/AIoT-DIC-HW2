@@ -40,6 +40,9 @@ main.wrap { display: grid; gap: 22px; padding-top: 24px; padding-bottom: 24px; }
 .status { margin: 0; color: var(--ink-3); }
 .status:empty { display: none; }
 .status.error { color: var(--bad); }
+.busy::before { content: ""; display: inline-block; width: .8em; height: .8em; margin-right: .45em; vertical-align: -.08em; border: 2px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .busy::before { animation: none; border-top-color: var(--accent-soft); } }
 
 /* hero */
 .hero { scroll-margin-top: 22px; position: relative; border-radius: 16px; padding: 40px 44px; color: var(--hero-ink); background: linear-gradient(118deg, var(--accent-deep) 0%, #0b5a6e 60%, var(--accent) 100%); box-shadow: 0 12px 32px -12px rgb(8 51 68 / .5); }
@@ -134,11 +137,11 @@ footer .refs { background: var(--card); border: 1px solid var(--rule); border-ra
 .upload .status { margin-top: .8rem; }
 .plan-head { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: flex-start; margin: 1.1rem 0; }
 .plan-head .muted { margin-top: .4rem; max-width: 40rem; }
-.plan-head select, .plan select, .plan input { font: inherit; font-size: .85rem; padding: .3rem .4rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--card); color: var(--ink); }
-.plan input[type=number] { width: 4.2rem; margin: 0 .3rem 0 .5rem; }
+.plan-head select { font: inherit; font-size: .85rem; padding: .3rem .4rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--card); color: var(--ink); }
 .plan td { white-space: normal; vertical-align: top; }
 .plan td.samples { font-family: var(--mono); font-size: .78rem; color: var(--ink-3); max-width: 16rem; }
-.plan td small { display: block; color: var(--ink-3); font-weight: 400; max-width: 16rem; }
+.plan td small { color: var(--ink-3); font-weight: 400; }
+.plan td:first-child small { display: block; max-width: 16rem; }
 .plan tr.changed td { background: var(--warn-soft); }
 .run-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
 .run-row progress { flex: 1 1 12rem; height: .6rem; accent-color: var(--accent); }
