@@ -17,8 +17,8 @@
 
 | | 項目 |
 |---|---|
-| 特徵選擇 | F 檢定（`f_regression`）、互資訊、RFE、逐步後退（依 CV R²）、Lasso 路徑（進入順序） |
-| 迴歸模型 | OLS、Ridge、Lasso、ElasticNet、Huber（Ridge / Lasso / ElasticNet 的 α 用訓練集 CV 調） |
+| 特徵選擇 | F 檢定（`f_regression`）、互資訊、RFE、逐步後退（每步刪 OLS p 值最大者）、Lasso 路徑（進入順序） |
+| 迴歸模型 | OLS、Ridge、Lasso、ElasticNet、Huber（α 用訓練集 CV 調；Lasso / ElasticNet 每個 fold 用全部特徵調一次，各 k 共用） |
 | 特徵數 | 每個 k = 1 … p 都跑；網頁標出每種方法 CV RMSE 最低的 k，以及 k = p 的完整模型 |
 | 基準 | 直接預測訓練集平均值；隨機挑 k 個特徵（OLS）；老師的表格（CI 自動檢查） |
 
@@ -44,7 +44,7 @@
 | | 50 Startups | Boston Housing |
 |---|---|---|
 | CV 最佳 | F 檢定 k = 2 + Huber，CV RMSE 9,304，測試 R² 0.947 | RFE k = 11 + OLS，CV RMSE 4.61，測試 R² 0.590 |
-| 測試最佳 | F 檢定 k = 2 + Lasso，測試 RMSE 8,199 | Lasso 路徑 k = 12 + OLS，測試 RMSE 5.78 |
+| 測試最佳 | F 檢定 k = 2 + OLS，測試 RMSE 8,199 | Lasso 路徑 k = 12 + OLS，測試 RMSE 5.78 |
 | 預測平均值（測試 RMSE） | 37,994 | 9.03 |
 | 結論 | 只要 R&D Spend + Marketing Spend；五種方法在每個 k 選的特徵幾乎相同，「一起比較」時線會重疊。州別沒有訊號 | 方法之間差異較大；LSTAT、RM 在每種方法都排前兩名。教科書常見的 R² 0.74 是「全資料、樣本內」，測試集只有 0.59 |
 

@@ -17,7 +17,7 @@ from sklearn.feature_selection import RFE, f_regression, mutual_info_regression
 from sklearn.linear_model import (ElasticNet, ElasticNetCV, HuberRegressor, Lasso, LassoCV, LinearRegression, Ridge,
                                   RidgeCV, enet_path, lars_path, lasso_path)
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error as rmse
-from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.preprocessing import StandardScaler
 
 METHODS = ["F-test", "MI", "RFE", "Backward", "Lasso", "All"]
@@ -33,7 +33,7 @@ def make_model(name, cfg):
     if name == "OLS":
         return LinearRegression()
     if name == "Ridge":
-        return RidgeCV(alphas=np.logspace(-3, 3, 25)) if cv else Ridge(cfg["alpha_ridge"])
+        return RidgeCV(alphas=np.logspace(-3, 3, 25)) if cv or cfg["alpha_ridge"] is None else Ridge(cfg["alpha_ridge"])   # RidgeCV 用 LOO 閉式解，每個 k 調也很便宜
     if name == "Lasso":
         return LassoCV(eps=1e-6, cv=5, max_iter=20000) if cv else Lasso(cfg["alpha_lasso"], max_iter=20000)
     if name == "ElasticNet":
@@ -65,10 +65,13 @@ def rank(Z, y, seed):
          "RFE": order(-RFE(LinearRegression(), n_features_to_select=1).fit(Z, y).ranking_),
          "Lasso": order(-np.array(entry, float)),                    # 越早進入路徑越重要
          "All": list(range(Z.shape[1]))}
-    keep, dropped = list(range(Z.shape[1])), []                    # backward：拿掉後 CV R² 最高的那個
+    keep, dropped = list(range(Z.shape[1])), []                    # backward：每次拿掉 OLS |t| 最小的那個（= p 值最大）
     while len(keep) > 1:
-        score = {j: cross_val_score(LinearRegression(), Z[:, [c for c in keep if c != j]], y, cv=5).mean() for j in keep}
-        j = max(score, key=score.get)
+        A = Z[:, keep]
+        b = np.linalg.lstsq(A, y, rcond=None)[0]
+        s2 = ((y - A @ b) ** 2).sum() / max(len(y) - len(keep) - 1, 1)
+        t = np.nan_to_num(np.abs(b) / np.sqrt(s2 * np.abs(np.diag(np.linalg.pinv(A.T @ A)))))
+        j = keep[int(np.argmin(t))]
         keep.remove(j)
         dropped.append(j)
     r["Backward"] = keep + dropped[::-1]
@@ -83,6 +86,14 @@ def fit_grid(Xtr, ytr, Xev, cfg, methods, models, tick):
     sc = StandardScaler().fit(Xtr)
     Ztr, Zev = sc.transform(Xtr), sc.transform(Xev)
     orders = rank(Ztr, ytr, cfg["seed"])
+    # ponytail: α 每個 fold 只用全部特徵調一次、所有 k 共用（快 10–15 倍）；小 k 會略為過度收縮，p=30 實測 CV RMSE 中位數 +0.5%、最多 +0.9%。
+    # 要更準就改成每個 k 各自用 LassoCV/ElasticNetCV（舊版做法），代價是 Pyodide 裡要等 1–2 分鐘
+    if cfg["tuning"] == "cv":
+        Atr = Ztr if cfg["standardize"] else Xtr
+        la = make_model("Lasso", cfg).fit(Atr, ytr) if "Lasso" in models else None
+        en = make_model("ElasticNet", cfg).fit(Atr, ytr) if "ElasticNet" in models else None
+        cfg = {**cfg, "tuning": "fixed", "alpha_ridge": None, **({"alpha_lasso": la.alpha_} if la else {}),
+               **({"alpha_enet": en.alpha_, "l1_ratio": en.l1_ratio_} if en else {})}
     out = {}
     for m in methods:
         o = orders[m]
@@ -96,7 +107,7 @@ def fit_grid(Xtr, ytr, Xev, cfg, methods, models, tick):
     return orders, sc, out
 
 
-def subsets(p, k, rng, n=50):
+def subsets(p, k, rng, n=20):
     if math.comb(p, k) <= n:
         return [list(s) for s in itertools.combinations(range(p), k)]
     seen = set()
