@@ -1,4 +1,4 @@
-"""`python tests/test_regress.py`：亂七八糟的 CSV 要嘛跑完、要嘛給看得懂的錯誤；另外檢查老師的數字與 backward 的算法。"""
+"""`python tests/test_regress.py`：亂七八糟的 CSV 要嘛跑完、要嘛給看得懂的錯誤；另外檢查已知的 OLS 數字與 backward 的算法。"""
 import json
 import sys
 import warnings
@@ -52,8 +52,8 @@ def fails(data, words, plan=None):
     raise AssertionError(f"expected a DataError containing {words!r}")
 
 
-def test_teacher_numbers():
-    """50 Startups 走一般流程（目標由欄名 Profit 自動選出）仍要重現老師表格的第 1、2 列與全特徵列。"""
+def test_known_numbers():
+    """50 Startups 走一般流程（目標由欄名 Profit 自動選出）要重現已知的 F-test + OLS 測試 RMSE（k = 1、2 與全特徵）。"""
     res = go((HERE / "50_startups.csv").read_bytes())
     assert res["target"] == "Profit" and action(res, "State") == "category"
     got = {(c["method"], c["k"]): c["test_rmse"] for c in res["combos"] if c["model"] == "OLS"}

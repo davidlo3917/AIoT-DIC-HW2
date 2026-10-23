@@ -1,4 +1,4 @@
-# Every push to main: run the tests (messy CSVs + the teacher's numbers) -> regress.py builds the preset JSON -> deploy web/ to GitHub Pages
+# Every push to main: run the tests -> regress.py builds the preset JSON -> deploy web/ to GitHub Pages
 name: Pages
 
 on:

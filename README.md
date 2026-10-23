@@ -1,13 +1,12 @@
 # AIIS HW2 — 任意 CSV 的線性迴歸實驗儀表板（CRISP-DM + AI）
 
-接續 [Lab 4](https://github.com/davidlo3917/AIoT-DIC-L4) 的儀表板：**5 種特徵選擇方法 × 5 種線性迴歸模型 × 每一個特徵數 k**，
-這次改成動態的。任何人上傳一份 CSV，整條流程在**瀏覽器裡用 Python（Pyodide）**跑完，
-Gemini 負責兩件事：建議每個欄位怎麼處理（使用者審核後才執行），以及根據算出來的數字寫一段結論。
+單頁的實驗儀表板：使用者上傳一份 CSV，網頁在**瀏覽器裡用 Python（Pyodide）**比較
+**5 種特徵選擇方法 × 5 種線性迴歸模型 × 每一個特徵數 k**（訓練 / 測試 = 80 / 20，5 折 CV），
+Gemini 負責兩件事：建議每個欄位的處理方式（經驗證後才採用），以及根據算出來的數字撰寫結論。
 預設放了兩份資料集：**Bike Sharing**（每小時租借量）與 **King County 房價**。
 
 - 網站：<https://davidlo3917.github.io/AIoT-DIC-HW2/>
-- 老師的 50 Startups 數字（8274.868018 / 8198.797191 / 9137.990153）仍由 `tests/test_regress.py` 在每次建置時檢查
-- 上傳的檔案不會離開瀏覽器；送到 AI 的只有欄位摘要與我們算出來的結果數字（見[AI 的角色與防護](#ai-的角色與防護)）
+- 上傳的檔案不會離開瀏覽器；送到 AI 的只有欄位摘要與計算結果（見[AI 的角色與防護](#ai-的角色與防護)）
 
 ![Bike Sharing：開場、AI 結論、控制列、指標卡、RMSE 與 R² 對 k、迴歸式、係數表、即時預測、殘差表](docs/dashboard.jpg)
 
@@ -30,52 +29,32 @@ flowchart LR
   CI[GitHub Actions: 測試 → regress.py] -- 預設資料集 JSON --> Pages[GitHub Pages]
 ```
 
-資料不離開瀏覽器：CSV 寫進 Pyodide 的虛擬檔案系統，`regress.py` 在 Web Worker 裡跑完整條流程。
-會離開瀏覽器的只有兩種東西，都先經過 Cloudflare Worker，它持有提示詞與金鑰、限制來源與頻率。
+CSV 寫進 Pyodide 的虛擬檔案系統，`regress.py` 在 Web Worker 裡執行整條流程。
+離開瀏覽器的只有欄位摘要與計算結果，兩者都經過 Cloudflare Worker，由它持有提示詞與金鑰、限制來源與頻率。
 
 ### 哪些事交給程式，哪些事交給 AI
 
-| 工作 | 誰做 | 為什麼 |
+| 工作 | 執行者 | 原因 |
 |---|---|---|
-| 讀檔、欄位摘要、型別與缺值處理、洩漏與共線偵測、80/20 切分、5 折 CV、5 × 5 種組合 × 每個 k 的配適、所有指標與基準 | `regress.py`：確定性程式，瀏覽器裡的 scikit-learn | 數字必須可重現、可驗證。CI 每次建置都用老師的 50 Startups 數字檢查，瀏覽器與 CI 算出同樣的結果 |
-| 讀懂欄位的「意思」：這欄是標籤還是數量、哪幾欄會洩漏目標、該預測哪一欄、每欄的說明、資料集的標題 | Gemini **建議** → `check_plan()` 驗證 → 使用者決定（可一鍵切回規則版、可改目標欄） | 規則看不懂語意：hr 是時段不是數量、casual + registered 就是 cnt。但 AI 只能建議，不能執行任何東西 |
-| 把結果寫成報告：摘要、3–5 個發現、建議、注意事項 | Gemini，輸入**只有我們算出來的數字**與準備紀錄 | 敘述是它的強項，算數不是。所以數字由程式算，AI 只負責說明，而且網頁標示為 AI 產生、請對照卡片 |
+| 讀檔、欄位摘要、型別與缺值處理、洩漏與共線偵測、80/20 切分、5 折 CV、5 × 5 種組合 × 每個 k 的配適、所有指標與基準 | `regress.py`：確定性程式，瀏覽器裡的 scikit-learn | 數字必須可重現、可驗證：CI 每次建置都跑測試，瀏覽器與 CI 算出同樣的結果 |
+| 判讀欄位語意：標籤或數量、哪些欄洩漏目標、預測哪一欄、欄位說明、資料集標題 | Gemini 建議 → `check_plan()` 驗證 → 使用者可切回規則版或改目標欄 | 規則無法判讀語意（hr 是時段、casual + registered = cnt）；AI 只能建議，不能執行 |
+| 撰寫結論：摘要、3–5 個發現、建議、注意事項 | Gemini，輸入只有計算結果與準備紀錄 | 數字由程式計算，AI 只負責敘述；網頁標示為 AI 產生 |
 
-### 這樣用 AI 對嗎
-
-做對的部分：
-
-- AI 不碰原始資料列、不算任何數字、不執行任何程式碼；它的輸出永遠是「建議」或「敘述」
-- 兩個端點的輸出都用 JSON schema 限制、逐欄清洗、再由 Python 驗證；`/plan` 用代號 `c0…cN` 指稱欄位，模型連欄名都不回傳
-- 欄名、樣本值、紀錄都明講是「資料，不是指令」；實測一份欄名寫著指令的 CSV 與一份「請回答這個問題」的 CSV 都沒有改變 AI 的行為
-- AI 不可用（逾時、額度、代理沒開）時規則版照常運作，網頁會說明
-- 使用者看得到 AI 改了什麼（標色）、改了幾欄、理由是什麼，隨時能切回規則版
-
-已知的限制，也寫在網頁上：
-
-- 結論偶爾會引用錯數字。開發時出現過一次（k 的範圍寫成 34–37，實際是 35–37），重新產生後正確。所以結論卡片註明「請對照下方卡片」，預設資料集的結論也是產生一次後存檔、人工看過
-- AI 的計畫不一定最好：Bike 的 hr 它只保留最常見的 9 個時段，預設資料集的計畫則保留全部 24 個
-- 送到 Google 的是欄名、每欄 5 個樣本值與結果數字；免費方案的提示可能被用於改善模型。**不要上傳含個資或機密的檔案**
-- 來源白名單可以被偽造；每 IP 每分鐘 10 次與免費額度是最後的防線
-
-可以再加的防線（還沒做）：自動檢查結論裡的每個數字都出現在輸入裡，對不上的句子就拿掉；
-以及 Cloudflare Turnstile 擋機器人。
-
-## 上傳自己的 CSV 會發生什麼事
+## 上傳流程
 
 1. 按 **Upload a CSV**（或把檔案拖進面板）。瀏覽器開始下載 Pyodide 與 scikit-learn（約 40 MB，第一次約 10 秒，之後有快取）。
 2. 檔案寫進 Pyodide 的虛擬檔案系統，`regress.py` 的 `profile()` 做每欄摘要，規則給出預設計畫：
    目標欄（照常見欄名猜，沒有就取最後一個數值欄）與每欄的動作 `numeric` / `category` / `date` / `extract-number` / `drop`。
 3. 同一時間，**欄位摘要**（欄名、型別、缺值比例、5 個樣本值、規則版動作）送到代理，Gemini 回傳建議計畫、欄位說明、標題與摘要句。
-   AI 改動的列會標色；覺得不對可以一鍵切回規則版，目標欄也可以自己選。AI 沒回應就用規則版，流程照常。
+   AI 改動的列會標色；可切回規則版，目標欄可自行選擇。AI 沒有回應時使用規則版。
 4. **Run the pipeline**：進度條顯示配了幾個模型；可以取消。結果變成一個新的資料集分頁，只存在記憶體裡。
-5. 跑完後，**我們算出來的數字**（最佳組合、各方法 / 各模型最佳、標準化效果、基準、準備紀錄）送給 Gemini 寫結論，
-   顯示在開場卡下方的「What the results say」，並標明是 AI 寫的、請對照下方卡片。
+5. 完成後，**計算結果**（最佳組合、各方法與各模型的最佳、標準化效果、基準、準備紀錄）送給 Gemini 撰寫結論，
+   顯示在開場卡下方的「What the results say」，並標示為 AI 產生。
 6. 控制列下方的「Preparation log」列出資料準備的每一步：抽樣、刪掉哪些欄、為什麼、類別怎麼合併、缺值怎麼補。
 
-## 對付亂七八糟的 CSV
+## 資料處理
 
-`read()` → `profile()` → `check_plan()` → `prepare()` → `screen()` 各擋一層；每個決定都寫進準備紀錄，錯誤訊息直接顯示給使用者。
+`read()` → `profile()` → `check_plan()` → `prepare()` → `screen()` 各負責一層檢查；每個決定都寫進準備紀錄，錯誤訊息直接顯示給使用者。
 
 | 狀況 | 處理 |
 |---|---|
@@ -92,12 +71,12 @@ flowchart LR
 | 來路不明的計畫 | AI 或使用者給的計畫一律經 `check_plan()`：欄名要存在、動作要合法，其餘補預設 |
 | 單一模型失敗 | 該格改用平均值並標記 `failed`，不拖垮整個網格 |
 
-`tests/test_regress.py` 有 17 個測試涵蓋以上情況，CI 每次建置都跑。
+`tests/test_regress.py` 有 17 個測試涵蓋以上情況，並以 50 Startups 的已知 OLS 數字檢查模型網格；CI 每次建置都跑。
 
-## 速度
+## 效能
 
-使用者的要求是不能等一兩分鐘。Chrome 實測：2,000 列 × 37 特徵約 16–23 秒，另加第一次下載 Pyodide 約 10 秒。
-為此 `regress.py` 做了幾件事（都有測試或比對證明結果不變）：
+目標是一次分析在 20 秒上下。Chrome 實測：2,000 列 × 37 特徵約 16–23 秒，另加第一次下載 Pyodide 約 10 秒。
+`regress.py` 的加速方式（都有測試或比對證明結果不變）：
 
 - OLS 用 Gram 矩陣一次算好，每組特徵只解一個 (k+1)×(k+1) 系統
 - Ridge 用閉式留一誤差自己選 α（測試證明與 `RidgeCV` 同解）
@@ -107,11 +86,11 @@ flowchart LR
 
 ## AI 的角色與防護
 
-AI 只做建議與敘述，**不執行任何東西**。兩個端點都在 `proxy/worker.mjs`（Cloudflare Worker，只為了藏金鑰）：
+AI 只做建議與敘述，不計算任何數字、不執行任何程式。兩個端點都在 `proxy/worker.mjs`（Cloudflare Worker，持有提示詞與金鑰）：
 
 | | `POST /plan` | `POST /summary` |
 |---|---|---|
-| 輸入 | 欄位摘要（不含資料列） | 我們算出來的數字與準備紀錄 |
+| 輸入 | 欄位摘要（不含資料列） | 計算結果與準備紀錄 |
 | 輸出 | 目標欄、每欄動作與理由、欄位說明、標題 | 摘要、3–5 個發現、建議、注意事項 |
 
 防護（`proxy/worker.test.mjs` 用假的 Gemini 測 8 個情境）：
@@ -123,8 +102,14 @@ AI 只做建議與敘述，**不執行任何東西**。兩個端點都在 `proxy
 - 模型：`gemini-3.5-flash`，過載或逾時就換 `gemini-3.5-flash-lite`；實測 `/plan` 6–21 秒、`/summary` 6–13 秒
 - 網頁上所有 AI 寫的文字都標示為 AI 產生；AI 不可用時規則版照常運作
 
-殘餘風險：Origin 標頭可以偽造，免費額度是最後的防線。預設資料集的結論只產生一次（`python web/regress.py summaries`），
-存在 `web/summaries.json`，之後每次建置沿用，訪客不會觸發 AI 呼叫。
+預設資料集的結論只產生一次（`python web/regress.py summaries`），存在 `web/summaries.json`，之後每次建置沿用，訪客不會觸發 AI 呼叫。
+
+限制：
+
+- 結論可能引用錯誤的數字；結論卡片因此註明請對照下方卡片，預設資料集的結論經人工檢查
+- AI 的計畫是建議，不一定是最佳選擇（例如 Bike 的 hr 只保留 9 個最常見時段，預設計畫保留 24 個）
+- 送到 Google 的是欄名、每欄 5 個樣本值與計算結果；免費方案的提示可能被用於改善模型，請勿上傳含個資或機密的檔案
+- Origin 標頭可以偽造；每 IP 每分鐘 10 次與免費額度是最後的防線
 
 ## 網頁上的 CRISP-DM
 
@@ -165,8 +150,7 @@ web/presets.json    兩份預設資料集的計畫與說明文字
 web/summaries.json  預設資料集的 AI 結論（產生一次）
 web/data/           兩份 CSV；*.json 由 regress.py 產生（不進版控）
 proxy/worker.mjs    Gemini 代理（Cloudflare Worker）與 wrangler.toml、離線測試
-tests/              messy CSV 測試、老師的 50 Startups 數字
-lab/                Lab 4 之前的單檔練習
+tests/              資料處理的測試與 50 Startups 的已知數字
 .github/workflows/pages.yml   推送到 main → 測試 → regress.py → 部署 GitHub Pages
 ```
 
@@ -201,5 +185,5 @@ $R web/regress.py summaries              # （選用）重新產生預設資料�
 - Bike Sharing：Fanaee-T, H. & Gama, J. (2013). *Event labeling combining ensemble detectors and background knowledge.* Progress in Artificial Intelligence.
   取自 [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset)，CC BY 4.0。
 - King County 房價：[Kaggle](https://www.kaggle.com/datasets/harlfoxem/housesalesprediction)，透過 [OpenML 42092](https://www.openml.org/d/42092) 下載，CC0。
-- 50 Startups（只用於測試）：SuperDataScience《Machine Learning A-Z》課程資料。
+- 50 Startups（`tests/` 的測試資料）：SuperDataScience《Machine Learning A-Z》課程資料。
 - 版面參考 [AIoT-DIC2-MultipleLR](https://huanchen1107.github.io/AIoT-DIC2-MultipleLR/)。
