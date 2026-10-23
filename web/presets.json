@@ -1,0 +1,84 @@
+[
+  {
+    "key": "bike",
+    "csv": "bike_hour.csv",
+    "plan": {
+      "target": "cnt",
+      "columns": {
+        "dteday": {"action": "drop", "reason": "same information as yr, mnth and weekday"},
+        "season": {"action": "category", "reason": "1 to 4 are season labels, not amounts"},
+        "hr": {"action": "category", "levels": 24, "reason": "demand peaks at the morning and evening rush hours instead of rising in a straight line"},
+        "weathersit": {"action": "category", "reason": "1 to 4 are weather types, not amounts"},
+        "casual": {"action": "drop", "reason": "part of the target: casual + registered = cnt"},
+        "registered": {"action": "drop", "reason": "part of the target: casual + registered = cnt"}
+      }
+    },
+    "spec": {
+      "name": "Bike Sharing",
+      "title": "What drives hourly bike rentals?",
+      "lede": "Capital Bikeshare, Washington D.C., 2011 and 2012: predict the rentals in an hour (cnt) from the hour of day, season, weather and calendar. casual and registered are dropped because they add up to cnt, and the hour is one-hot encoded because demand peaks at rush hour instead of rising in a straight line.",
+      "unit": "rentals",
+      "digits": 0,
+      "descriptions": {
+        "instant": "record number",
+        "dteday": "date",
+        "season": "1 spring, 2 summer, 3 fall, 4 winter",
+        "yr": "year: 0 = 2011, 1 = 2012",
+        "mnth": "month, 1 to 12",
+        "hr": "hour of the day, 0 to 23",
+        "holiday": "1 if the day is a public holiday",
+        "weekday": "day of the week, 0 = Sunday to 6 = Saturday",
+        "workingday": "1 if the day is neither a weekend nor a holiday",
+        "weathersit": "weather type: 1 clear, 2 mist or cloud, 3 light rain or snow, 4 heavy rain, ice or fog",
+        "temp": "temperature, °C divided by 41",
+        "atemp": "feels-like temperature, °C divided by 50",
+        "hum": "relative humidity divided by 100",
+        "windspeed": "wind speed divided by 67",
+        "casual": "rentals by casual users",
+        "registered": "rentals by registered users",
+        "cnt": "rentals in the hour, casual plus registered users"
+      }
+    }
+  },
+  {
+    "key": "kc",
+    "csv": "kc_house.csv",
+    "plan": {
+      "target": "price",
+      "columns": {
+        "zipcode": {"action": "category", "levels": 20, "reason": "ZIP code is a location label, not a quantity"},
+        "sqft_above": {"action": "drop", "reason": "sqft_living = sqft_above + sqft_basement"}
+      }
+    },
+    "spec": {
+      "name": "King County houses",
+      "title": "What sets a house price in King County?",
+      "lede": "Home sales in King County, Washington (the Seattle area), May 2014 to May 2015: predict the sale price from size, build quality, location and age. id is dropped, the sale date becomes year and month, ZIP code is treated as a label, and sqft_above is dropped because sqft_living = sqft_above + sqft_basement.",
+      "unit": "US$",
+      "digits": 0,
+      "descriptions": {
+        "id": "sale record id",
+        "date": "sale date",
+        "price": "sale price, US$",
+        "bedrooms": "number of bedrooms",
+        "bathrooms": "number of bathrooms; 0.5 is a toilet without a shower",
+        "sqft_living": "interior living space, sq ft",
+        "sqft_lot": "land area, sq ft",
+        "floors": "number of floors",
+        "waterfront": "1 if the house overlooks the waterfront",
+        "view": "quality of the view, 0 to 4",
+        "condition": "condition of the house, 1 to 5",
+        "grade": "construction and design quality, 1 to 13 (King County grading)",
+        "sqft_above": "living space above ground, sq ft",
+        "sqft_basement": "living space below ground, sq ft",
+        "yr_built": "year built",
+        "yr_renovated": "year of the last renovation, 0 if never",
+        "zipcode": "ZIP code",
+        "lat": "latitude",
+        "long": "longitude",
+        "sqft_living15": "average living space of the 15 nearest houses, sq ft",
+        "sqft_lot15": "average land area of the 15 nearest houses, sq ft"
+      }
+    }
+  }
+]
