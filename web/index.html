@@ -23,25 +23,8 @@
   <main class="wrap">
     <p class="status" id="status" role="status">Loading results…</p>
 
-    <section class="hero">
-      <span class="phase"><b>1</b>Business understanding</span>
-      <h2 id="heroTitle"></h2>
-      <p id="heroLede"></p>
-      <div class="pills" id="pills"></div>
-    </section>
-
-    <section class="card ai" id="summary" hidden>
-      <header><div><h3>What the results say</h3><p class="muted" id="sumNote"></p></div><span class="phase"><b>5</b>Evaluation</span></header>
-      <div class="prose" id="sumBody"></div>
-    </section>
-
-    <section class="card controls">
+    <section class="card">
       <div class="ctl"><span class="lbl">Dataset</span><div class="row"><div class="seg" id="ds" role="radiogroup" aria-label="Dataset"></div><button type="button" class="btn" id="uploadBtn">⬆ Upload a CSV</button><input type="file" id="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden></div></div>
-      <div class="ctl"><span class="lbl">1. Feature selection method</span><div class="seg" id="methods" role="radiogroup" aria-label="Feature selection method"></div></div>
-      <div class="ctl"><span class="lbl">2. Regression model</span><div class="seg" id="models" role="radiogroup" aria-label="Regression model"></div></div>
-      <div class="ctl"><span class="lbl">3. Number of features k</span><div class="seg" id="ks" role="radiogroup" aria-label="Number of features"></div></div>
-      <p class="muted prep"><span class="phase"><b>3</b>Data preparation</span><span id="prep"></span></p>
-      <details class="log"><summary id="logSum"></summary><ol id="prepLog"></ol></details>
     </section>
 
     <section class="card upload" id="upload" hidden>
@@ -58,6 +41,26 @@
         <div class="table-wrap plan" id="plan"></div>
         <div class="run-row"><button type="button" class="btn primary" id="run">Run the pipeline</button><button type="button" class="btn" id="cancel" hidden>Cancel</button><progress id="prog" aria-label="Run progress" hidden></progress><span class="muted" id="runNote"></span></div>
       </div>
+    </section>
+
+    <section class="hero">
+      <span class="phase"><b>1</b>Business understanding</span>
+      <h2 id="heroTitle"></h2>
+      <p id="heroLede"></p>
+      <div class="pills" id="pills"></div>
+    </section>
+
+    <section class="card ai" id="summary" hidden>
+      <header><div><h3>What the results say</h3><p class="muted" id="sumNote"></p></div><span class="phase"><b>5</b>Evaluation</span></header>
+      <div class="prose" id="sumBody"></div>
+    </section>
+
+    <section class="card controls">
+      <div class="ctl"><span class="lbl">1. Feature selection method</span><div class="seg" id="methods" role="radiogroup" aria-label="Feature selection method"></div></div>
+      <div class="ctl"><span class="lbl">2. Regression model</span><div class="seg" id="models" role="radiogroup" aria-label="Regression model"></div></div>
+      <div class="ctl"><span class="lbl">3. Number of features k</span><div class="seg" id="ks" role="radiogroup" aria-label="Number of features"></div></div>
+      <p class="muted prep"><span class="phase"><b>3</b>Data preparation</span><span id="prep"></span></p>
+      <details class="log"><summary id="logSum"></summary><ol id="prepLog"></ol></details>
     </section>
 
     <section>

@@ -42,7 +42,7 @@ main.wrap { display: grid; gap: 22px; padding-top: 24px; padding-bottom: 24px; }
 .status.error { color: var(--bad); }
 
 /* hero */
-.hero { position: relative; border-radius: 16px; padding: 40px 44px; color: var(--hero-ink); background: linear-gradient(118deg, var(--accent-deep) 0%, #0b5a6e 60%, var(--accent) 100%); box-shadow: 0 12px 32px -12px rgb(8 51 68 / .5); }
+.hero { scroll-margin-top: 22px; position: relative; border-radius: 16px; padding: 40px 44px; color: var(--hero-ink); background: linear-gradient(118deg, var(--accent-deep) 0%, #0b5a6e 60%, var(--accent) 100%); box-shadow: 0 12px 32px -12px rgb(8 51 68 / .5); }
 .hero .phase { position: absolute; top: 20px; right: 24px; background: rgb(255 255 255 / .14); color: var(--hero-ink); }
 .hero h2 { font-size: 2.3rem; font-weight: 700; max-width: 42rem; }
 .hero p { max-width: 52rem; font-size: 1rem; color: var(--hero-mute); margin: .8rem 0 1.4rem; }
@@ -53,6 +53,7 @@ main.wrap { display: grid; gap: 22px; padding-top: 24px; padding-bottom: 24px; }
 
 /* controls */
 .ctl { margin-bottom: 1.1rem; }
+.ctl:last-child { margin-bottom: 0; }
 .lbl { display: block; font-size: .74rem; font-weight: 600; color: var(--ink-3); margin-bottom: .45rem; }
 .seg { display: flex; flex-wrap: wrap; gap: .45rem; }
 .seg button, .btn { font: 500 .88rem var(--sans); border: 1px solid var(--rule); background: var(--card); color: var(--ink-2); border-radius: 999px; padding: .45rem .95rem; cursor: pointer; display: inline-flex; align-items: center; gap: .45rem; transition: background .15s, color .15s; }

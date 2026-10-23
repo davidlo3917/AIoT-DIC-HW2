@@ -259,7 +259,7 @@ async function runUpload() {
     render();
     summarise(S.base.upload);
     $("runNote").textContent = `Done in ${secs.toFixed(1)} s. The results live in this tab only and replace any earlier upload.`;
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.querySelector(".hero").scrollIntoView({ behavior: "smooth" });   // the upload panel sits above the results
   } catch (e) { $("runNote").textContent = ""; showErr(e); }
   finally { $("run").disabled = false; $("cancel").hidden = true; $("prog").hidden = true; $("upStatus").textContent = ""; }
 }
