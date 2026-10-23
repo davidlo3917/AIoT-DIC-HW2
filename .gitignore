@@ -7,3 +7,4 @@ web/data/*.json
 node_modules/
 .dev.vars
 .wrangler/
+samples/
