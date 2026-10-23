@@ -12,6 +12,8 @@ import json
 import math
 import re
 import sys
+import time
+import urllib.request
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
@@ -518,7 +520,7 @@ def run(data, plan=None, progress=None, spec=None):
     spec = {"name": "Uploaded data", "title": f"What drives {target}?", "lede": "", "unit": "",
             "digits": 0 if np.median(np.abs(y)) >= 100 else 2, "descriptions": {}, **(spec or {})}
     numeric = [c for c in cols if "level" not in feats[c]]
-    return dict(
+    res = dict(
         target=target, spec=spec, config=CONFIG,
         prep=dict(file=info, profile=prof, plan=plan, log=log),
         meta=dict(rows=len(y), p=p, n_train=n, n_test=len(yte), features=cols,
@@ -529,6 +531,30 @@ def run(data, plan=None, progress=None, spec=None):
                   train_sd=sc.scale_.tolist(),
                   missing=int(df.isna().sum().sum()), duplicates=int(df.duplicated().sum())),
         combos=combos, bench=benchmarks(Xtr, ytr, Xte, yte, folds))
+    res["summary_input"] = summary_input(res)
+    return res
+
+
+def summary_input(res):
+    """給 AI 寫結論的材料：只有我們算出來的數字與紀錄，沒有原始資料。proxy/worker.mjs 的 /summary 會再逐欄清洗。"""
+    combos = [c for c in res["combos"] if c["method"] != "All"]
+    best = min(combos, key=lambda c: c["cv_rmse"])
+    full = next(c for c in res["combos"] if c["method"] == "All" and c["model"] == "OLS")
+    m, b = res["meta"], res["bench"]
+    rand, sd = b["random"][best["k"] - 1]["cv"][2], dict(zip(m["features"], m["train_sd"]))
+    pick = lambda c: {k: c[k] for k in ("method", "model", "k", "cv_rmse", "test_rmse", "test_r2")}
+    effects = sorted(zip(best["features"], best["coef"]), key=lambda fc: -abs(fc[1] * sd[fc[0]]))[:6]
+    return dict(
+        dataset=res["spec"]["name"], title=res["spec"]["title"], target=res["target"], unit=res["spec"]["unit"],
+        rows=m["rows"], features=m["p"], train_rows=m["n_train"], test_rows=m["n_test"],
+        baseline_test_rmse=b["mean"]["test"], random_subsets_median_cv_rmse_at_best_k=rand,
+        best_by_cv={**pick(best), "test_mae": best["test_mae"], "features": best["features"],
+                    "strongest_effects_per_sd": [{"feature": f, "effect": c * sd[f], "meaning": m["desc"].get(f, "")} for f, c in effects]},
+        full_model_ols=pick(full),
+        best_per_method=[pick(min((c for c in combos if c["method"] == x), key=lambda c: c["cv_rmse"])) for x in METHODS if x != "All"],
+        best_per_model=[pick(min((c for c in combos if c["model"] == x), key=lambda c: c["cv_rmse"])) for x in MODELS],
+        criterion={"cv_rmse_below_baseline": round(1 - best["cv_rmse"] / b["mean"]["cv"], 3), "beats_random_subsets": best["cv_rmse"] < rand},
+        preparation_log=res["prep"]["log"][:12])
 
 
 # ── 給 worker.js（Pyodide）用：檔案已寫進虛擬檔案系統，結果以 JSON 字串回傳 ──
@@ -545,9 +571,25 @@ def run_json(path, plan=None, progress=None, spec=None):
 
 if __name__ == "__main__":
     here = Path(__file__).parent / "data"
-    for p in json.loads((here.parent / "presets.json").read_text()):
+    presets = json.loads((here.parent / "presets.json").read_text())
+    summaries = json.loads((here.parent / "summaries.json").read_text()) if (here.parent / "summaries.json").exists() else {}
+    if sys.argv[1:2] == ["summaries"]:   # python web/regress.py summaries [proxy]：請 AI 為每個預設資料集寫一次結論 → web/summaries.json（之後每次建置都沿用）
+        proxy = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:8787"
+        for p in presets:
+            data = json.loads((here / f"{p['key']}.json").read_text())
+            req = urllib.request.Request(f"{proxy}/summary", json.dumps(data["summary_input"]).encode(),
+                                         {"Content-Type": "application/json", "Origin": "http://localhost:8000"})
+            t = time.perf_counter()
+            with urllib.request.urlopen(req, timeout=60) as r:
+                data["summary"] = summaries[p["key"]] = {**json.load(r), "date": time.strftime("%Y-%m-%d")}
+            (here / f"{p['key']}.json").write_text(json.dumps(data, separators=(",", ":"), allow_nan=False))
+            print(f"{p['key']}: {data['summary']['model']} in {time.perf_counter() - t:.1f} s", file=sys.stderr)
+        (here.parent / "summaries.json").write_text(json.dumps(summaries, indent=1, ensure_ascii=False) + "\n")
+        sys.exit()
+    for p in presets:
         res = run((here / p["csv"]).read_bytes(), p.get("plan"), spec=p["spec"],
                   progress=lambda d, t: print(f"\r{p['key']}: {d}/{t}", end="", file=sys.stderr))
+        res["summary"] = summaries.get(p["key"])
         text = json.dumps(res, separators=(",", ":"), allow_nan=False)  # allow_nan=False：任何 NaN/inf 都會失敗
         (here / f"{p['key']}.json").write_text(text)
         print(f"\n{p['key']}: {res['meta']['rows']} rows, p = {res['meta']['p']}, {len(res['combos'])} combos, "

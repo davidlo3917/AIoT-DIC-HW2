@@ -146,3 +146,9 @@ details.log { margin-top: .6rem; font-size: .85rem; color: var(--ink-3); }
 details.log summary { cursor: pointer; }
 details.log ol { margin: .4rem 0 0; padding-left: 1.4rem; color: var(--ink-2); }
 .seg.dense button { padding: .3rem .6rem; font-size: .8rem; }
+
+/* AI summary */
+.ai { border-left: 4px solid var(--mint); }
+.prose p { margin: 0 0 .7rem; }
+.prose ul { margin: 0 0 .8rem; padding-left: 1.3rem; }
+.prose li { margin-bottom: .25rem; }

@@ -74,6 +74,14 @@ function renderHero(d) {
     ...(s.ai ? [["✦ Descriptions on this page were written by AI (Gemini): check them", "ai"]] : [])]
     .map(([t, cls = ""]) => `<span class="pill ${cls}">${esc(t)}</span>`).join("");
 }
+function renderSummary(d) {
+  const s = d.summary;
+  $("summary").hidden = !s;
+  if (!s) return;
+  $("sumNote").textContent = s.pending ? "Asking the AI (Gemini) to summarise the results…" : s.error ? `AI summary unavailable (${s.error}).`
+    : `Written by AI (Gemini ${s.model}${s.date ? `, ${s.date}` : ""}) from the numbers on this page, not from the data itself. Check every claim against the cards below.`;
+  $("sumBody").innerHTML = s.summary ? `<p>${esc(s.summary)}</p><ul>${s.findings.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p><b>Recommendation.</b> ${esc(s.recommendation)}</p>${s.caveats.length ? `<p class="muted">Caveats: ${s.caveats.map(esc).join(" ")}</p>` : ""}` : "";
+}
 function renderMetrics(d, a) {
   const b = d.bench.mean;
   $("metricsHead").textContent = `${label(a)}, k = ${a.k}`;
@@ -195,19 +203,26 @@ async function planFile(file) {
   renderPlan();
   askAI(file);
 }
-async function askAI(file) {
+async function ask(path, body) {   // the proxy's answer, or {error}
   try {
-    const r = await fetch(`${PROXY}/plan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(U.resp), signal: AbortSignal.timeout(50_000) });
+    const r = await fetch(`${PROXY}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(50_000) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-    if (U.file !== file) return;
-    U.ai = d;
-    if (!U.edited) { U.source = "ai"; U.plan = fromSource("ai"); }   // never overwrite edits the user made while waiting
-  } catch (e) {
-    if (U.file !== file) return;
-    U.ai = { error: e.name === "TimeoutError" ? "timed out" : e.name === "TypeError" ? "proxy not reachable" : e.message };
-  }
+    return d;
+  } catch (e) { return { error: e.name === "TimeoutError" ? "timed out" : e.name === "TypeError" ? "proxy not reachable" : e.message }; }
+}
+async function askAI(file) {
+  const d = await ask("/plan", U.resp);
+  if (U.file !== file) return;
+  U.ai = d;
+  if (!d.error && !U.edited) { U.source = "ai"; U.plan = fromSource("ai"); }   // never overwrite edits the user made while waiting
   renderPlan();
+}
+async function summarise(d) {
+  d.summary = { pending: true };
+  renderSummary(d);
+  d.summary = await ask("/summary", d.summary_input);
+  if (cur() === d) renderSummary(d);
 }
 function renderPlan() {
   const { file, resp, plan, rules, ai } = U, f = resp.file, hasAI = ai && !ai.error;
@@ -242,6 +257,7 @@ async function runUpload() {
       ({ done, total }) => { $("prog").max = total; $("prog").value = done; $("runNote").textContent = `Fitted ${done.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} models, ${Math.round((performance.now() - t0) / 1000)} s`; });
     S.base.upload = JSON.parse(json); S.ds = "upload"; S.k = null; S.whatif = {};
     render();
+    summarise(S.base.upload);
     $("runNote").textContent = `Done in ${secs.toFixed(1)} s. The results live in this tab only and replace any earlier upload.`;
     window.scrollTo({ top: 0, behavior: "smooth" });
   } catch (e) { $("runNote").textContent = ""; showErr(e); }
@@ -273,6 +289,7 @@ function render() {
   const a = active(d);
   renderControls(d, a);
   renderHero(d);
+  renderSummary(d);
   renderMetrics(d, a);
   renderStrip(d, a);
   renderCharts(d, a);
