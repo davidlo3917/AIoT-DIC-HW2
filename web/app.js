@@ -21,6 +21,8 @@ const label = (c) => `${ML[c.method]} + ${c.model}`;
 const series = (d, method, model) => d.combos.filter((c) => c.method === method && c.model === model).sort((a, b) => a.k - b.k);
 const minBy = (list, f) => list.reduce((a, b) => (f(b) < f(a) ? b : a));
 const methods = () => (S.method === "*" ? METHODS : [S.method]);
+const best = (d) => minBy(d.combos.filter((c) => c.method !== "All"), (c) => c.cv_rmse);   // the recommended combination
+const choose = (d) => { const b = best(d); Object.assign(S, { method: b.method, model: b.model, k: null, whatif: {} }); };   // every dataset opens on it
 // the combo every card describes: the chosen k, or each method's best k by CV RMSE; in compare mode the best method wins
 function active(d) {
   const cands = methods().map((m) => (S.k ? series(d, m, S.model).find((c) => c.k === S.k) : minBy(series(d, m, S.model), (c) => c.cv_rmse)));
@@ -50,11 +52,12 @@ function seg(box, options, value, onPick) {
 }
 function renderControls(d, a) {
   const pick = (f) => (v) => { f(v); S.k = null; S.whatif = {}; render(); };
-  seg($("ds"), Object.entries(S.base).map(([k, v]) => [k, esc(v.spec.name)]), S.ds, pick((v) => (S.ds = v)));
-  seg($("methods"), [...METHODS.map((m, i) => [m, `<span class="sw" style="--c:var(--m${i + 1})"></span>${ML[m]}`]), ["*", `Compare all ${METHODS.length} methods`, "all"]], S.method, pick((v) => (S.method = v)));
-  seg($("models"), MODELS.map((m) => [m, m]), S.model, pick((v) => (S.model = v)));
-  const best = minBy(methods().flatMap((m) => series(d, m, S.model)), (c) => c.cv_rmse).k, p = d.meta.p;
-  seg($("ks"), Array.from({ length: p }, (_, i) => i + 1).map((k) => [k, `k = ${k}${k === best ? " <small>★ Best by CV</small>" : k === p ? " <small>Full model</small>" : ""}`, k === best ? "best" : k === p ? "full" : ""]), a.k, (v) => { S.k = +v; S.whatif = {}; render(); });
+  const b = best(d), star = " <small>★ Best by CV</small>";
+  seg($("ds"), Object.entries(S.base).map(([k, v]) => [k, esc(v.spec.name)]), S.ds, pick((v) => { S.ds = v; choose(cur()); }));
+  seg($("methods"), [...METHODS.map((m, i) => [m, `<span class="sw" style="--c:var(--m${i + 1})"></span>${ML[m]}${m === b.method ? star : ""}`, m === b.method ? "best" : ""]), ["*", `Compare all ${METHODS.length} methods`, "all"]], S.method, pick((v) => (S.method = v)));
+  seg($("models"), MODELS.map((m) => [m, `${m}${m === b.model ? star : ""}`, m === b.model ? "best" : ""]), S.model, pick((v) => (S.model = v)));
+  const bk = minBy(methods().flatMap((m) => series(d, m, S.model)), (c) => c.cv_rmse).k, p = d.meta.p;
+  seg($("ks"), Array.from({ length: p }, (_, i) => i + 1).map((k) => [k, `k = ${k}${k === bk ? star : k === p ? " <small>Full model</small>" : ""}`, k === bk ? "best" : k === p ? "full" : ""]), a.k, (v) => { S.k = +v; S.whatif = {}; render(); });
   $("ks").classList.toggle("dense", p > 15);
   const c = d.config, txt = d.meta.text_columns, f = d.prep.file, log = d.prep.log;
   $("prep").textContent = `${txt.length ? `One-hot ${txt.join(", ")} with the first level dropped (${p} columns). ` : ""}80/20 split with seed ${c.seed}: ${d.meta.n_train} train, ${d.meta.n_test} test rows. StandardScaler fitted on the training rows. Features are ranked inside each of the ${c.folds} CV folds, so CV never sees validation rows.`;
@@ -64,12 +67,12 @@ function renderControls(d, a) {
 
 // ── hero, metric cards, strip ────────────────────────────────────────────────
 function renderHero(d) {
-  const s = spec(), all = d.combos.filter((c) => c.method !== "All"), best = minBy(all, (c) => c.cv_rmse), full = series(d, "All", "OLS")[0];
+  const s = spec(), b = best(d), full = series(d, "All", "OLS")[0];
   $("heroTitle").textContent = s.title;
   $("heroLede").textContent = s.lede;
   $("pills").innerHTML = [[`${d.meta.rows} rows, ${d.meta.p} features, target ${d.target}`], [`${METHODS.length} selection methods × ${MODELS.length} models × k = 1 … ${d.meta.p}`],
-    [`★ Best by CV: ${label(best)}, k = ${best.k} (test RMSE ${fmt(best.test_rmse)})`, "best"],
-    [`Full model, k = ${d.meta.p}: test RMSE ${fmt(full.test_rmse)}`, full.test_rmse > best.test_rmse ? "warn" : ""],
+    [`★ Best by CV: ${label(b)}, k = ${b.k} (test RMSE ${fmt(b.test_rmse)})`, "best"],
+    [`Full model, k = ${d.meta.p}: test RMSE ${fmt(full.test_rmse)}`, full.test_rmse > b.test_rmse ? "warn" : ""],
     ...(s.ai ? [["✦ Descriptions on this page were written by AI (Gemini): check them", "ai"]] : [])]
     .map(([t, cls = ""]) => `<span class="pill ${cls}">${esc(t)}</span>`).join("");
 }
@@ -257,7 +260,7 @@ async function runUpload() {
     const buf = await file.arrayBuffer();
     const { json, secs } = await call({ type: "run", file: buf, plan, spec }, [buf],
       ({ done, total }) => { $("prog").max = total; $("prog").value = done; $("runNote").textContent = `Fitted ${done.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} models, ${Math.round((performance.now() - t0) / 1000)} s`; });
-    S.base.upload = JSON.parse(json); S.ds = "upload"; S.k = null; S.whatif = {};
+    S.base.upload = JSON.parse(json); S.ds = "upload"; choose(S.base.upload);
     render();
     summarise(S.base.upload);
     $("runNote").textContent = `Done in ${secs.toFixed(1)} s. The results live in this tab only and replace any earlier upload.`;
@@ -297,6 +300,7 @@ try {
   const data = await Promise.all(presets.map((p) => fetch(`data/${p.key}.json`).then((r) => { if (!r.ok) throw new Error(`${r.status} data/${p.key}.json`); return r.json(); })));
   presets.forEach((p, i) => (S.base[p.key] = data[i]));
   S.ds = presets[0].key;
+  choose(cur());
   $("status").textContent = "";
   render();
 } catch (err) {
